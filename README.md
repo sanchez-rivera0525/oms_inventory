@@ -32,6 +32,8 @@ If PowerShell blocks `npm.ps1`, run the same server directly:
 node scripts\serve.cjs 4176
 ```
 
+The server listens on your computer and your local network. The app header shows a `Phone` link when a LAN address is available. Open that `http://<your-computer-ip>:4176` link from a phone on the same Wi-Fi. Windows Firewall may ask you to allow Node.js on private networks the first time.
+
 ## Update Inventory Data
 
 Regenerate committed data from a newer workbook:

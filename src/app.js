@@ -2,6 +2,7 @@ const API_DATA_URL = "/api/inventory";
 const FALLBACK_DATA_URL = "/data/oms_inventory.json";
 const API_IMPORT_URL = "/api/import";
 const API_CONFIG_URL = "/api/config";
+const API_NETWORK_URL = "/api/network";
 
 const REQUIRED_FIELDS = [
   "model_number",
@@ -74,6 +75,9 @@ const FIELD_LABELS = {
   missing_fields: "missing_fields",
   last_updated: "last_updated",
   source_file_name: "source_file_name",
+  specs: "specs",
+  pictures: "pictures",
+  notes: "notes",
 };
 
 const LOOKUP_GROUPS = [
@@ -85,6 +89,7 @@ const LOOKUP_GROUPS = [
   { title: "Shipping", fields: ["carrier_type", "ships_via", "shipping_dims"] },
   { title: "Carton Dimensions", fields: ["carton_1_width", "carton_1_depth", "carton_1_height"] },
   { title: "Weight", fields: ["product_weight_lb", "pallet_weight_lb", "total_product_pallet_weight_lb"] },
+  { title: "Links / Notes", fields: ["specs", "pictures", "notes"] },
   { title: "System / Review", fields: ["missing_fields", "last_updated", "source_file_name"] },
 ];
 
@@ -193,6 +198,8 @@ const WAREHOUSE_CATEGORIES = [
 ];
 
 const els = {
+  pageShell: document.querySelector("#pageShell"),
+  networkLinks: document.querySelector("#networkLinks"),
   searchInput: document.querySelector("#searchInput"),
   viewPanels: [...document.querySelectorAll("[data-view]")],
   viewLinks: [...document.querySelectorAll("[data-view-link]")],
@@ -206,9 +213,7 @@ const els = {
   fileInput: document.querySelector("#fileInput"),
   dropZone: document.querySelector("#dropZone"),
   importSummary: document.querySelector("#importSummary"),
-  resultCount: document.querySelector("#resultCount"),
-  sortSelect: document.querySelector("#sortSelect"),
-  resultsContent: document.querySelector("#resultsContent"),
+  selectedPanel: document.querySelector("#selectedPanel"),
   selectedSubtitle: document.querySelector("#selectedSubtitle"),
   selectedContent: document.querySelector("#selectedContent"),
   saveStatus: document.querySelector("#saveStatus"),
@@ -224,7 +229,6 @@ const state = {
   selectedKey: "",
   partsClass: "all",
   shippingGroup: "location",
-  sort: "best",
   importSummary: null,
 };
 
@@ -233,6 +237,7 @@ init();
 async function init() {
   bindEvents();
   state.view = viewFromPath(window.location.pathname);
+  fetchNetworkLinks();
   try {
     const dataset = await fetchInventory();
     loadDataset(dataset);
@@ -266,11 +271,6 @@ function bindEvents() {
   els.shippingGroup.addEventListener("change", (event) => {
     state.shippingGroup = event.target.value;
     renderShipping();
-  });
-
-  els.sortSelect.addEventListener("change", (event) => {
-    state.sort = event.target.value;
-    renderResults();
   });
 
   document.addEventListener("click", (event) => {
@@ -339,6 +339,24 @@ async function fetchInventory() {
     const fallback = await fetch(FALLBACK_DATA_URL, { cache: "no-store" });
     if (!fallback.ok) throw new Error("Unable to load OMS inventory data.");
     return fallback.json();
+  }
+}
+
+async function fetchNetworkLinks() {
+  if (!els.networkLinks) return;
+  try {
+    const response = await fetch(API_NETWORK_URL, { cache: "no-store" });
+    if (!response.ok) throw new Error("Network links unavailable");
+    const payload = await response.json();
+    const links = payload.urls || [];
+    const phoneLink = links.find((item) => item.kind === "lan") || links[0];
+    if (!phoneLink) return;
+    els.networkLinks.innerHTML = `
+      <span>Phone</span>
+      <a href="${escapeAttr(phoneLink.url)}" target="_blank" rel="noreferrer">${escapeHtml(phoneLink.url)}</a>
+    `;
+  } catch (_error) {
+    els.networkLinks.innerHTML = `<span>Phone</span><span>Run on same Wi-Fi</span>`;
   }
 }
 
@@ -480,6 +498,8 @@ function setView(view, push) {
 
 function render() {
   if (!state.dataset) return;
+  document.body.dataset.currentView = state.view;
+  els.pageShell.dataset.currentView = state.view;
   els.searchInput.value = state.query;
   els.viewPanels.forEach((panel) => panel.classList.toggle("active", panel.dataset.view === state.view));
   els.viewLinks.forEach((link) => link.classList.toggle("active", link.dataset.viewLink === state.view));
@@ -488,7 +508,6 @@ function render() {
   renderParts();
   renderShipping();
   renderImportSummary();
-  renderResults();
   renderSelected();
 }
 
@@ -505,14 +524,18 @@ function renderAwnings() {
     return;
   }
 
-  const rows = filteredRows(state.dataset.rows.filter((row) => row.warehouse_category === "Awnings"));
+  const rows = sortRows(filteredRows(state.dataset.rows.filter((row) => row.warehouse_category === "Awnings")));
+  if (state.view === "awnings") syncSelection(rows);
   els.awningsContent.innerHTML = `${renderSummaryStrip(rows)}${renderInventoryTable(rows, "No awning items found.")}`;
 }
 
 function renderParts() {
-  const rows = filteredRows(
-    state.dataset.rows.filter((row) => row.warehouse_category !== "Awnings" && (state.partsClass === "all" || row.classification === state.partsClass)),
+  const rows = sortRows(
+    filteredRows(
+      state.dataset.rows.filter((row) => row.warehouse_category !== "Awnings" && (state.partsClass === "all" || row.classification === state.partsClass)),
+    ),
   );
+  if (state.view === "parts") syncSelection(rows);
   els.partsContent.innerHTML = `${renderSummaryStrip(rows)}${renderInventoryTable(rows, "No items found.")}`;
 }
 
@@ -525,6 +548,7 @@ function renderShipping() {
       cleanCell(a.model_number || a.part_number).localeCompare(cleanCell(b.model_number || b.part_number))
     );
   });
+  if (state.view === "shipping") syncSelection(rows);
   els.shippingContent.innerHTML = renderShippingTable(rows);
 }
 
@@ -556,6 +580,7 @@ function renderInventoryTable(rows, emptyText) {
   if (!rows.length) return `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
   return `
     <div class="table-wrap">
+      <div class="table-note">${rows.length.toLocaleString()} matching records. Select a row to view details.</div>
       <table>
         <thead>
           <tr>
@@ -565,6 +590,7 @@ function renderInventoryTable(rows, emptyText) {
             <th>Series</th>
             <th>Color</th>
             <th>Dims</th>
+            <th>Links</th>
             <th>Qty</th>
             <th>Status</th>
           </tr>
@@ -581,6 +607,7 @@ function renderInventoryTable(rows, emptyText) {
                   <td>${escapeHtml(row.series || "-")}</td>
                   <td>${escapeHtml(compactJoin([row.canopy_color, row.frame_color], " / ") || "-")}</td>
                   <td>${escapeHtml(row.shipping_dims || "-")}</td>
+                  <td>${renderLinkBadges(row)}</td>
                   <td>${escapeHtml(row.inventory || "0")}</td>
                   <td><span class="status ${statusClass(row.stock_status)}">${escapeHtml(row.stock_status)}</span></td>
                 </tr>
@@ -604,7 +631,7 @@ function renderShippingTable(rows) {
       const groupHeader =
         groupValue !== currentGroup
           ? ((currentGroup = groupValue),
-            `<tr class="group-row"><td colspan="8">${escapeHtml(labelForField(groupField))}: ${escapeHtml(groupValue)}</td></tr>`)
+            `<tr class="group-row"><td colspan="9">${escapeHtml(labelForField(groupField))}: ${escapeHtml(groupValue)}</td></tr>`)
           : "";
       return `
         ${groupHeader}
@@ -616,6 +643,7 @@ function renderShippingTable(rows) {
           <td>${escapeHtml(row.ships_via || "-")}</td>
           <td>${escapeHtml(row.shipping_dims || "-")}</td>
           <td>${escapeHtml(row.product_weight_lb || "-")}</td>
+          <td>${renderLinkBadges(row)}</td>
           <td>${escapeHtml(row.inventory || "0")}</td>
         </tr>
       `;
@@ -624,6 +652,7 @@ function renderShippingTable(rows) {
 
   return `
     <div class="table-wrap">
+      <div class="table-note">${rows.length.toLocaleString()} matching records. Grouped by ${escapeHtml(labelForField(groupField))}.</div>
       <table>
         <thead>
           <tr>
@@ -634,6 +663,7 @@ function renderShippingTable(rows) {
             <th>Ships Via</th>
             <th>Dims</th>
             <th>Wt (lb)</th>
+            <th>Links</th>
             <th>Qty</th>
           </tr>
         </thead>
@@ -641,41 +671,6 @@ function renderShippingTable(rows) {
       </table>
     </div>
   `;
-}
-
-function renderResults() {
-  const rows = filteredRows(state.dataset.rows).sort(compareRows);
-  if (!rows.some((row) => row.record_key === state.selectedKey)) state.selectedKey = rows[0]?.record_key || "";
-  const visible = rows.slice(0, 120);
-  els.resultCount.textContent = `${rows.length.toLocaleString()} ${rows.length === 1 ? "match" : "matches"}${
-    rows.length > visible.length ? ` / showing ${visible.length}` : ""
-  }`;
-
-  els.resultsContent.innerHTML =
-    visible.length === 0
-      ? `<div class="empty-state">No matching records.</div>`
-      : `<div class="results-list">
-          ${visible
-            .map(
-              (row) => `
-                <button class="result-button ${row.record_key === state.selectedKey ? "active" : ""}" type="button" data-select-key="${escapeAttr(
-                  row.record_key,
-                )}">
-                  <div>
-                    <div class="model-cell">${escapeHtml(row.model_number || row.part_number || "Missing model")}</div>
-                    <div class="muted">${escapeHtml(row.part_number && row.part_number !== row.model_number ? row.part_number : row.series || "")}</div>
-                  </div>
-                  <div class="result-description">${escapeHtml(row.description || "No description")}</div>
-                  <div class="result-meta">
-                    <span class="pill">${escapeHtml(row.classification || "Review")}</span>
-                    <span class="pill">${escapeHtml(row.shipping_dims || "No dims")}</span>
-                    <span class="status ${statusClass(row.stock_status)}">${escapeHtml(row.stock_status)}</span>
-                  </div>
-                </button>
-              `,
-            )
-            .join("")}
-        </div>`;
 }
 
 function renderSelected() {
@@ -986,15 +981,23 @@ function filteredRows(rows) {
   return rows.filter((row) => fields.some((field) => normalizeSearch(row[field]).includes(query)));
 }
 
-function compareRows(a, b) {
-  if (state.sort === "stock") return numeric(b.inventory) - numeric(a.inventory);
-  if (state.sort === "model") return cleanCell(a.model_number || a.part_number).localeCompare(cleanCell(b.model_number || b.part_number));
-  if (state.sort === "class") return cleanCell(a.classification).localeCompare(cleanCell(b.classification));
-  if (state.sort === "location") return cleanCell(a.location).localeCompare(cleanCell(b.location));
-
+function sortRows(rows) {
   const query = normalizeSearch(state.query);
   const fields = state.dataset.required_searchable_fields || REQUIRED_FIELDS;
-  return scoreRow(b, query, fields) - scoreRow(a, query, fields) || numeric(b.inventory) - numeric(a.inventory);
+  return [...rows].sort((a, b) => {
+    return (
+      scoreRow(b, query, fields) - scoreRow(a, query, fields) ||
+      cleanCell(a.model_number || a.part_number).localeCompare(cleanCell(b.model_number || b.part_number))
+    );
+  });
+}
+
+function syncSelection(rows) {
+  if (!rows.length) {
+    state.selectedKey = "";
+    return;
+  }
+  if (!rows.some((row) => row.record_key === state.selectedKey)) state.selectedKey = rows[0].record_key;
 }
 
 function scoreRow(row, query, fields) {
@@ -1183,8 +1186,7 @@ function setSaveStatus(text) {
 }
 
 function showFatalError(message) {
-  els.resultCount.textContent = "Inventory failed to load.";
-  els.resultsContent.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
+  els.awningsContent.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
   els.selectedContent.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
 }
 
@@ -1198,11 +1200,46 @@ function labelForField(field) {
   return FIELD_LABELS[field] || field;
 }
 
+function renderLinkBadges(row) {
+  const links = linkFields(row);
+  if (!links.length) return "-";
+  return links
+    .map(
+      (link) =>
+        `<a class="link-badge" href="${escapeAttr(link.url)}" target="_blank" rel="noreferrer">${escapeHtml(link.label)}</a>`,
+    )
+    .join("");
+}
+
+function linkFields(row) {
+  return [
+    ...extractLinks(row.specs, "Specs"),
+    ...extractLinks(row.pictures, "Pictures"),
+    ...extractLinks(row.notes, "Notes"),
+  ];
+}
+
+function extractLinks(value, label) {
+  const text = cleanCell(value);
+  if (!text) return [];
+  const matches = text.match(/https?:\/\/[^\s,;]+/gi) || [];
+  return matches.map((url, index) => ({ label: matches.length > 1 ? `${label} ${index + 1}` : label, url }));
+}
+
 function formatFieldValue(value) {
   if (Array.isArray(value)) return value.length ? escapeHtml(value.join(", ")) : "-";
   const text = cleanCell(value);
   if (!text) return "-";
-  if (/^https?:\/\//i.test(text)) return `<a href="${escapeAttr(text)}" target="_blank" rel="noreferrer">${escapeHtml(text)}</a>`;
+  const links = extractLinks(text, "Open");
+  if (links.length) {
+    const linked = links.reduce((html, link) => {
+      return html.replace(
+        escapeHtml(link.url),
+        `<a href="${escapeAttr(link.url)}" target="_blank" rel="noreferrer">${escapeHtml(link.url)}</a>`,
+      );
+    }, escapeHtml(text));
+    return linked;
+  }
   return escapeHtml(text);
 }
 

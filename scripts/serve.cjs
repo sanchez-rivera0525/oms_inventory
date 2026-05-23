@@ -2,9 +2,11 @@
 
 const fs = require("node:fs");
 const http = require("node:http");
+const os = require("node:os");
 const path = require("node:path");
 
 const port = Number(process.argv[2] || 4176);
+const host = process.env.HOST || "0.0.0.0";
 const root = path.resolve(__dirname, "..");
 const dataDir = path.join(root, "data");
 const jsonPath = path.join(dataDir, "oms_inventory.json");
@@ -25,6 +27,14 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/inventory") {
       return sendFile(response, jsonPath, "application/json; charset=utf-8");
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/network") {
+      return sendJson(response, 200, {
+        host,
+        port,
+        urls: networkUrls(port),
+      });
     }
 
     if (request.method === "POST" && (url.pathname === "/api/import" || url.pathname === "/api/config")) {
@@ -49,8 +59,11 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-server.listen(port, "127.0.0.1", () => {
+server.listen(port, host, () => {
   console.log(`OMS_inventory running at http://127.0.0.1:${port}`);
+  networkUrls(port)
+    .filter((item) => item.kind === "lan")
+    .forEach((item) => console.log(`Phone/LAN URL: ${item.url}`));
 });
 
 function serveStatic(url, response) {
@@ -67,6 +80,18 @@ function serveStatic(url, response) {
   }
 
   sendFile(response, filePath, types[path.extname(filePath)] || "application/octet-stream");
+}
+
+function networkUrls(serverPort) {
+  const urls = [{ kind: "local", url: `http://127.0.0.1:${serverPort}/` }];
+  const interfaces = os.networkInterfaces();
+  Object.values(interfaces).forEach((items) => {
+    (items || []).forEach((item) => {
+      if (item.family !== "IPv4" || item.internal) return;
+      urls.push({ kind: "lan", name: item.name || "LAN", url: `http://${item.address}:${serverPort}/` });
+    });
+  });
+  return urls;
 }
 
 function sendFile(response, filePath, contentType) {
