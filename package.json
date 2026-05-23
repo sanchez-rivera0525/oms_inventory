@@ -2,11 +2,26 @@
   "name": "oms_inventory",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "Warehouse-style lookup app for Advaning OMS inventory data.",
   "scripts": {
+    "dev": "next dev -H 0.0.0.0 -p 4176",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 4176",
     "import": "node scripts/import-oms-inventory.cjs",
-    "serve": "node scripts/serve.cjs 4176",
-    "test": "node scripts/check-data.cjs"
+    "serve:legacy": "node scripts/serve.cjs 4176",
+    "test": "node scripts/check-data.cjs && node --check src/app.js"
   },
+  "dependencies": {
+    "@clerk/nextjs": "7.4.1",
+    "@upstash/redis": "1.38.0",
+    "next": "16.2.6",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "overrides": {
+    "postcss": "8.5.15"
+  },
+  "devDependencies": {},
   "license": "UNLICENSED"
 }

@@ -1,5 +1,4 @@
 const API_DATA_URL = "/api/inventory";
-const FALLBACK_DATA_URL = "/data/oms_inventory.json";
 const API_IMPORT_URL = "/api/import";
 const API_CONFIG_URL = "/api/config";
 const API_NETWORK_URL = "/api/network";
@@ -331,15 +330,10 @@ function bindEvents() {
 }
 
 async function fetchInventory() {
-  try {
-    const response = await fetch(API_DATA_URL, { cache: "no-store" });
-    if (!response.ok) throw new Error("API data unavailable");
-    return response.json();
-  } catch (_error) {
-    const fallback = await fetch(FALLBACK_DATA_URL, { cache: "no-store" });
-    if (!fallback.ok) throw new Error("Unable to load OMS inventory data.");
-    return fallback.json();
-  }
+  const response = await fetch(API_DATA_URL, { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "Unable to load OMS inventory data.");
+  return payload;
 }
 
 async function fetchNetworkLinks() {
@@ -349,7 +343,7 @@ async function fetchNetworkLinks() {
     if (!response.ok) throw new Error("Network links unavailable");
     const payload = await response.json();
     const links = payload.urls || [];
-    const phoneLink = links.find((item) => item.kind === "lan") || links[0];
+    const phoneLink = links.find((item) => item.kind === "web") || links.find((item) => item.kind === "lan") || links[0];
     if (!phoneLink) return;
     els.networkLinks.innerHTML = `
       <span>Phone</span>
@@ -597,7 +591,6 @@ function renderInventoryTable(rows, emptyText) {
         </thead>
         <tbody>
           ${rows
-            .slice(0, 300)
             .map(
               (row) => `
                 <tr class="${row.record_key === state.selectedKey ? "selected" : ""}" data-select-key="${escapeAttr(row.record_key)}">
@@ -625,7 +618,6 @@ function renderShippingTable(rows) {
   let currentGroup = "";
   const groupField = state.shippingGroup;
   const rowHtml = rows
-    .slice(0, 500)
     .map((row) => {
       const groupValue = cleanCell(row[groupField]) || "Unassigned";
       const groupHeader =
@@ -754,7 +746,7 @@ function renderImportSummary() {
     ["Missing fields", summary.missing_required_fields_total],
   ];
   const reviewLines = [
-    summary.saved ? `Saved ${summary.source_file_name} to data/oms_inventory.json and data/oms_inventory.csv.` : "",
+    summary.saved ? `Saved ${summary.source_file_name} to the OMS inventory store.` : "",
     summary.confirmation_item ? `Confirmed ${summary.confirmation_item.model_number}: ${summary.confirmation_item.description}` : "",
     ...(summary.missing_required_headers || []).map((field) => `Missing header: ${field}`),
     ...(summary.duplicate_keys || []).slice(0, 40).map((key) => `Duplicate key retained for review: ${key}`),

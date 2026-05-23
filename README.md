@@ -18,10 +18,10 @@ The app uses one normalized source table named `oms_inventory`. The source workb
 
 Awnings, parts, accessories, replacement components, shipping/packaging items, and review-needed records are all filters over the same normalized table. Records are not copied into separate source sheets.
 
-## Run
+## Run Locally
 
 ```powershell
-npm run serve
+npm run dev
 ```
 
 Open `http://127.0.0.1:4176`.
@@ -29,10 +29,41 @@ Open `http://127.0.0.1:4176`.
 If PowerShell blocks `npm.ps1`, run the same server directly:
 
 ```powershell
-node scripts\serve.cjs 4176
+node .\node_modules\next\dist\bin\next dev -H 0.0.0.0 -p 4176
 ```
 
-The server listens on your computer and your local network. The app header shows a `Phone` link when a LAN address is available. Open that `http://<your-computer-ip>:4176` link from a phone on the same Wi-Fi. Windows Firewall may ask you to allow Node.js on private networks the first time.
+Local development allows a no-Clerk fallback so you can keep working before hosted auth is configured. The deployed Vercel app requires Clerk and the approved email allowlist.
+
+## Use Without Your Laptop
+
+To use the lookup from a phone without connecting to your laptop, deploy it to Vercel as a normal HTTPS website.
+
+- The production app uses Clerk login and Upstash Redis storage through Vercel.
+- `GET /api/inventory`, `POST /api/import`, `POST /api/config`, and `GET /api/network` all require an approved signed-in user.
+- If Redis is empty, the app seeds it from committed `data/oms_inventory.json`.
+- Imports are authoritative replacements and persist to Redis online. Local development without Redis writes `data/oms_inventory.json` and `data/oms_inventory.csv`.
+- Codex mobile is not required for the inventory app. Codex is only the builder/editor; once hosted, the app opens in Safari/Chrome like any other website.
+
+Required Vercel environment:
+
+```env
+CLERK_SECRET_KEY=
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+OMS_ALLOWED_EMAILS=sanchez.rivera0525@gmail.com
+```
+
+Install Clerk and Upstash from the Vercel Marketplace so the environment variables are attached to the `OMS_inventory` project.
+
+Deploy after the marketplace integrations and env vars are present:
+
+```powershell
+npm run build
+vercel --prod
+```
 
 ## Update Inventory Data
 
