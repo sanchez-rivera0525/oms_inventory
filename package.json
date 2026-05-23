@@ -1,0 +1,12 @@
+{
+  "name": "oms_inventory",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Warehouse-style lookup app for Advaning OMS inventory data.",
+  "scripts": {
+    "import": "node scripts/import-oms-inventory.cjs",
+    "serve": "node scripts/serve.cjs 4176",
+    "test": "node scripts/check-data.cjs"
+  },
+  "license": "UNLICENSED"
+}

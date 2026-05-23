@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OMS Inventory Console</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/awnings" aria-label="OMS inventory console">
+        <span class="brand-mark">OMS</span>
+        <span>Inventory Console</span>
+      </a>
+
+      <label class="global-search">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <input
+          id="searchInput"
+          type="search"
+          placeholder="Model, part, color, carrier, dimensions..."
+          autocomplete="off"
+        />
+      </label>
+
+      <nav class="tabs" aria-label="Inventory sections">
+        <a href="/awnings" data-view-link="awnings">Awnings</a>
+        <a href="/parts" data-view-link="parts">Parts &amp; Accessories</a>
+        <a href="/shipping" data-view-link="shipping">Shipping</a>
+        <a href="/import" data-view-link="import">Import</a>
+      </nav>
+    </header>
+
+    <main class="page-shell">
+      <section id="awningsView" class="view-panel" data-view="awnings">
+        <div class="section-heading">
+          <div>
+            <h1>Awnings</h1>
+            <p id="awningsSubtitle">Items in classifications marked as awnings.</p>
+          </div>
+          <button id="configureAwnings" class="secondary-action" type="button">Configure awning classes</button>
+        </div>
+        <div id="awningsContent"></div>
+      </section>
+
+      <section id="partsView" class="view-panel" data-view="parts">
+        <div class="section-heading">
+          <div>
+            <h1>Parts &amp; Accessories</h1>
+            <p>All non-awning inventory items from the same normalized OMS inventory table.</p>
+          </div>
+          <label class="inline-select">
+            <span>Class</span>
+            <select id="partsClassFilter"></select>
+          </label>
+        </div>
+        <div id="partsContent"></div>
+      </section>
+
+      <section id="shippingView" class="view-panel" data-view="shipping">
+        <div class="section-heading">
+          <div>
+            <h1>Shipping &amp; Warehouse</h1>
+            <p>Grouped by warehouse location, carrier, and shipping details.</p>
+          </div>
+          <label class="inline-select">
+            <span>Group</span>
+            <select id="shippingGroup">
+              <option value="location">Location</option>
+              <option value="carrier_type">Carrier</option>
+              <option value="ships_via">Ships via</option>
+              <option value="shipping_dims">Dimensions</option>
+            </select>
+          </label>
+        </div>
+        <div id="shippingContent"></div>
+      </section>
+
+      <section id="importView" class="view-panel" data-view="import">
+        <div class="section-heading">
+          <div>
+            <h1>Inventory Update / Import</h1>
+            <p>
+              Upload an OMS inventory file (.xlsx, .xls, .csv). The uploaded OMS_inventory sheet replaces the current
+              inventory file.
+            </p>
+          </div>
+        </div>
+        <label id="dropZone" class="upload-zone">
+          <input id="fileInput" type="file" accept=".xlsx,.xls,.csv,.json" />
+          <strong>Drop or click to choose file</strong>
+          <span>.xlsx / .xls / .csv</span>
+        </label>
+        <div id="importSummary" class="import-summary"></div>
+      </section>
+
+      <section class="lookup-grid" aria-label="Search and selected item details">
+        <article class="results-panel">
+          <div class="panel-title-row">
+            <div>
+              <h2>Search Results</h2>
+              <p id="resultCount">Loading inventory...</p>
+            </div>
+            <label class="inline-select compact">
+              <span>Sort</span>
+              <select id="sortSelect">
+                <option value="best">Best match</option>
+                <option value="stock">Inventory high to low</option>
+                <option value="model">Model / part number</option>
+                <option value="class">Classification</option>
+                <option value="location">Location</option>
+              </select>
+            </label>
+          </div>
+          <div id="resultsContent"></div>
+        </article>
+
+        <article class="selected-panel">
+          <div class="panel-title-row">
+            <div>
+              <h2>Selected Item Lookup</h2>
+              <p id="selectedSubtitle">Choose an inventory item.</p>
+            </div>
+            <div id="saveStatus" class="save-status" role="status"></div>
+          </div>
+          <div id="selectedContent"></div>
+        </article>
+      </section>
+    </main>
+
+    <dialog id="awningDialog" class="modal">
+      <form method="dialog">
+        <div class="modal-heading">
+          <div>
+            <h2>Configure Awning Classes</h2>
+            <p>Pick which classification values should appear under Awnings.</p>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Close" type="submit">×</button>
+        </div>
+        <div id="awningClassList" class="class-list"></div>
+        <div class="modal-actions">
+          <button id="cancelAwningConfig" class="secondary-action" value="cancel" type="submit">Cancel</button>
+          <button id="saveAwningConfig" class="primary-action" value="default" type="button">Save classes</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/vendor/xlsx.full.min.js"></script>
+    <script type="module" src="/src/app.js"></script>
+  </body>
+</html>
