@@ -4,7 +4,7 @@
     "purpose": "Warehouse-style lookup app for Advaning OMS inventory data.",
     "source_sheet_name": "masterlist",
     "source_file_name": "oms_inventory_list_master.xlsx",
-    "generated_at": "2026-05-25T18:58:28.818Z",
+    "generated_at": "2026-05-25T20:45:57.591Z",
     "source_rule": "One normalized oms_inventory table; upload may come from OMS_inventory or masterlist. Reference-only columns are retained only when operationally useful.",
     "classification_rule": "Awnings are controlled by app_config.awning_classifications. All other sections filter the same rows.",
     "relationship_rule": "Series/class codes from masterlist create parent-child reference links from series groups to awnings, parts, fabrics, and accessories."
@@ -163,7 +163,7 @@
         "location",
         "inventory"
       ],
-      "last_updated": "2026-05-25T18:58:27.413Z",
+      "last_updated": "2026-05-25T20:45:57.855Z",
       "source_file_name": "oms_inventory_list_master.xlsx",
       "source_sheet_name": "masterlist",
       "source_row_number": 2,
@@ -180,7 +180,7 @@
       "unit": "ea",
       "oem": "Z-ACCOR",
       "brand": "",
-      "cost": "52.13",
+      "cost": "50.00",
       "gross_weight_lb": "",
       "cubic_feet": "0.5",
       "pallet_size": "",
