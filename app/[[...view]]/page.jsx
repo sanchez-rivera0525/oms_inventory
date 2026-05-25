@@ -12,144 +12,149 @@ export default async function InventoryPage() {
 
   return (
     <>
-      <header className="topbar">
-        <a className="brand" href="/awnings" aria-label="OMS inventory console">
-          <span className="brand-mark">OMS</span>
-          <span>Inventory Console</span>
-        </a>
-
-        <label className="global-search">
-          <span className="search-icon" aria-hidden="true">
-            Find
-          </span>
-          <input
-            id="searchInput"
-            type="search"
-            placeholder="Model, part, color, carrier, dimensions..."
-            autoComplete="off"
-          />
-        </label>
-
-        <nav className="tabs" aria-label="Inventory sections">
-          <a href="/awnings" data-view-link="awnings">
-            Awnings
+      <div className="app-frame">
+        <aside className="topbar app-sidebar">
+          <a className="brand" href="/search" aria-label="OMS inventory console">
+            <span className="brand-mark">OMS</span>
+            <span>
+              Inventory
+              <small>shipping console</small>
+            </span>
           </a>
-          <a href="/parts" data-view-link="parts">
-            Parts &amp; Accessories
-          </a>
-          <a href="/shipping" data-view-link="shipping">
-            Shipping
-          </a>
-          <a href="/import" data-view-link="import">
-            Import
-          </a>
-        </nav>
 
-        <div id="networkLinks" className="network-links" aria-label="Open on phone" />
-        <div className="account-area">{isClerkConfigured() ? <UserButton afterSignOutUrl="/sign-in" /> : <span>Local dev</span>}</div>
-      </header>
+          <nav className="tabs" aria-label="Inventory workflows">
+            <span className="nav-section-label">Main Menu</span>
+            <a href="/search" data-view-link="search">
+              <span className="nav-icon">⌕</span>
+              SKU Lookup
+            </a>
+            <a href="/compare" data-view-link="compare">
+              <span className="nav-icon">⇄</span>
+              Load Compare
+            </a>
+            <a href="/edit" data-view-link="edit">
+              <span className="nav-icon">✎</span>
+              SKU Edit
+            </a>
+            <a href="/audit" data-view-link="reflect">
+              <span className="nav-icon">⚠</span>
+              Validation Queue
+            </a>
+            <span className="nav-section-label">Resources</span>
+            <a className="utility-link" href="/import" data-view-link="import">
+              <span className="nav-icon">⇧</span>
+              Load Sheet
+            </a>
+          </nav>
 
-      <main id="pageShell" className="page-shell">
-        <section className="workspace">
-          <section id="awningsView" className="view-panel" data-view="awnings">
-            <div className="section-heading">
-              <div>
-                <h1>Awnings</h1>
-                <p id="awningsSubtitle">Items in classifications marked as awnings.</p>
-              </div>
-              <button id="configureAwnings" className="secondary-action" type="button">
-                Configure awning classes
-              </button>
+          <div className="sidebar-footer">
+            <div id="networkLinks" className="network-links" aria-label="Open on phone" />
+            <div className="account-area">
+              {isClerkConfigured() ? <UserButton afterSignOutUrl="/sign-in" /> : <span>Local dev</span>}
             </div>
-            <div id="awningsContent" />
-          </section>
-
-          <section id="partsView" className="view-panel" data-view="parts">
-            <div className="section-heading">
-              <div>
-                <h1>Parts &amp; Accessories</h1>
-                <p>All non-awning inventory items from the same normalized OMS inventory table.</p>
-              </div>
-              <label className="inline-select">
-                <span>Class</span>
-                <select id="partsClassFilter" />
-              </label>
-            </div>
-            <div id="partsContent" />
-          </section>
-
-          <section id="shippingView" className="view-panel" data-view="shipping">
-            <div className="section-heading">
-              <div>
-                <h1>Shipping &amp; Warehouse</h1>
-                <p>Grouped by warehouse location, carrier, and shipping details.</p>
-              </div>
-              <label className="inline-select">
-                <span>Group</span>
-                <select id="shippingGroup" defaultValue="location">
-                  <option value="location">Location</option>
-                  <option value="carrier_type">Carrier</option>
-                  <option value="ships_via">Ships via</option>
-                  <option value="shipping_dims">Dimensions</option>
-                </select>
-              </label>
-            </div>
-            <div id="shippingContent" />
-          </section>
-
-          <section id="importView" className="view-panel" data-view="import">
-            <div className="section-heading">
-              <div>
-                <h1>Inventory Update / Import</h1>
-                <p>
-                  Upload an OMS inventory file (.xlsx, .xls, .csv). The uploaded OMS_inventory sheet replaces the current
-                  inventory file.
-                </p>
-              </div>
-            </div>
-            <label id="dropZone" className="upload-zone">
-              <input id="fileInput" type="file" accept=".xlsx,.xls,.csv,.json" />
-              <strong>Drop or click to choose file</strong>
-              <span>.xlsx / .xls / .csv</span>
-            </label>
-            <div id="importSummary" className="import-summary" />
-          </section>
-        </section>
-
-        <aside id="selectedPanel" className="selected-panel">
-          <div className="panel-title-row">
-            <div>
-              <h2>Selected Item Lookup</h2>
-              <p id="selectedSubtitle">Choose an inventory item.</p>
-            </div>
-            <div id="saveStatus" className="save-status" role="status" />
           </div>
-          <div id="selectedContent" />
         </aside>
-      </main>
 
-      <dialog id="awningDialog" className="modal">
-        <form method="dialog">
-          <div className="modal-heading">
+        <section className="workspace">
+          <header className="workspace-topbar">
             <div>
-              <h2>Configure Awning Classes</h2>
-              <p>Pick which classification values should appear under Awnings.</p>
+              <h1>OMS Operations</h1>
+              <p>Awning logistics lookup, shipping validation, and support memory.</p>
             </div>
-            <button className="icon-button" value="cancel" aria-label="Close" type="submit">
-              x
-            </button>
-          </div>
-          <div id="awningClassList" className="class-list" />
-          <div className="modal-actions">
-            <button id="cancelAwningConfig" className="secondary-action" value="cancel" type="submit">
-              Cancel
-            </button>
-            <button id="saveAwningConfig" className="primary-action" value="default" type="button">
-              Save classes
-            </button>
-          </div>
-        </form>
-      </dialog>
+            <label className="global-search">
+              <span className="search-icon" aria-hidden="true">
+                Find
+              </span>
+              <input
+                id="searchInput"
+                type="search"
+                placeholder="SKU, model, ship dims, carrier, freight notes..."
+                autoComplete="off"
+              />
+            </label>
+          </header>
+
+          <main id="pageShell" className="page-shell">
+            <section className="console-main">
+              <div id="quickStats" className="quick-stats" />
+
+              <section id="searchView" className="view-panel" data-view="search">
+                <div className="panel-heading">
+                  <div>
+                    <h1>SKU Lookup</h1>
+                    <p id="searchSubtitle">Warehouse lookup</p>
+                  </div>
+                  <div id="searchPills" className="pill-row" />
+                </div>
+                <div id="searchContent" />
+              </section>
+
+              <section id="compareView" className="view-panel" data-view="compare">
+                <div className="panel-heading">
+                  <div>
+                    <h1>Load Compare</h1>
+                    <p id="compareSubtitle">Side-by-side shipping checks</p>
+                  </div>
+                  <button id="clearCompare" className="secondary-action" type="button" data-clear-compare>
+                    Clear load
+                  </button>
+                </div>
+                <div id="compareContent" />
+              </section>
+
+              <section id="editView" className="view-panel" data-view="edit">
+                <div className="panel-heading">
+                  <div>
+                    <h1>SKU Edit</h1>
+                    <p id="editSubtitle">Controlled field update</p>
+                  </div>
+                </div>
+                <div id="editContent" />
+              </section>
+
+              <section id="reflectView" className="view-panel" data-view="reflect">
+                <div className="panel-heading">
+                  <div>
+                    <h1>Validation Queue</h1>
+                    <p id="reflectSubtitle">Shipping blockers and freight exceptions</p>
+                  </div>
+                  <button id="refreshReflect" className="secondary-action" type="button" data-view-action="reflect">
+                    Recheck
+                  </button>
+                </div>
+                <div id="reflectContent" />
+              </section>
+
+              <section id="importView" className="view-panel" data-view="import">
+                <div className="panel-heading">
+                  <div>
+                    <h1>Load Sheet</h1>
+                    <p id="importSubtitle">Replace working SKU file</p>
+                  </div>
+                </div>
+                <label id="dropZone" className="upload-zone">
+                  <input id="fileInput" type="file" accept=".xlsx,.xls,.csv,.json" />
+                  <strong>Drop revised OMS file</strong>
+                  <span>.xlsx / .xls / .csv / .json</span>
+                </label>
+                <div id="importSummary" className="import-summary" />
+              </section>
+            </section>
+
+            <aside id="detailPanel" className="detail-panel">
+              <div className="panel-title-row">
+                <div>
+                  <h2>Selected SKU</h2>
+                  <p id="selectedSubtitle">No SKU selected</p>
+                </div>
+                <div id="saveStatus" className="save-status" role="status" />
+              </div>
+              <div id="selectedContent" />
+              <div id="compareTray" className="compare-tray" />
+            </aside>
+          </main>
+        </section>
+      </div>
 
       <InventoryBoot />
     </>

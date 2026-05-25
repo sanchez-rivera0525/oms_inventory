@@ -29,7 +29,8 @@ const required = [
 ];
 
 assert(data.table_name === "oms_inventory", "table must be named oms_inventory");
-assert(data.metadata.source_sheet_name.toLowerCase() === "oms_inventory", "source sheet must be OMS_inventory");
+const sourceSheetName = String(data.metadata.source_sheet_name || "").toLowerCase();
+assert(["oms_inventory", "masterlist"].includes(sourceSheetName), "source sheet must be OMS_inventory or masterlist");
 assert(Array.isArray(data.rows), "rows must be an array");
 assert(data.rows.length >= 600, "expected the single OMS_inventory sheet, not a tiny sample");
 assert(!JSON.stringify(data).includes("Copy of PARTS"), "must not include Copy of PARTS data");
@@ -66,8 +67,11 @@ assert(
 const part = data.rows.find((row) => row.model_number === "ZLA-WMB-B1");
 assert(part, "expected ZLA-WMB-B1");
 assert(part.part_number === "ZLA-WMB-B1", "parts should expose part_number");
-assert(part.warehouse_category === "Replacement Components", "ZLA-WMB-B1 should be a replacement component");
-assert(part.shipping_dims === "4x7x3", "ZLA-WMB-B1 dimensions should come from source data");
+assert(
+  ["Parts", "Replacement Components"].includes(part.warehouse_category),
+  "ZLA-WMB-B1 should be categorized as a warehouse part",
+);
+assert(normalizeDims(part.shipping_dims) === "4x7x3", "ZLA-WMB-B1 dimensions should come from source data");
 
 assert(fs.existsSync(csvPath), "CSV export must exist");
 const csv = fs.readFileSync(csvPath, "utf8");
@@ -84,4 +88,11 @@ function assert(condition, message) {
     console.error(`Data check failed: ${message}`);
     process.exit(1);
   }
+}
+
+function normalizeDims(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s*x\s*/g, "x")
+    .trim();
 }

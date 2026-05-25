@@ -2,7 +2,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const XLSX = require("../vendor/xlsx.full.min.js");
+const XLSX = require("../vendor/xlsx.full.min.cjs");
 
 const workbookPath = process.argv[2] || "C:/Users/sanch/Downloads/advaning.rev 2.xlsx";
 const repoRoot = path.resolve(__dirname, "..");
@@ -43,6 +43,13 @@ const EXTRA_FIELDS = [
   "manual_classification",
   "review_needed",
   "review_notes",
+  "item_type",
+  "series_code",
+  "source_status",
+  "department",
+  "unit",
+  "oem",
+  "brand",
   "cost",
   "gross_weight_lb",
   "cubic_feet",
@@ -52,36 +59,58 @@ const EXTRA_FIELDS = [
   "specs",
   "pictures",
   "notes",
+  "notes2",
 ];
 
 const OUTPUT_FIELDS = [...REQUIRED_FIELDS, ...EXTRA_FIELDS];
+const GROUPED_CONTEXT_FIELDS = ["classification", "item_type", "series", "series_code", "source_status", "department", "unit"];
 
 const HEADER_ALIASES = new Map(
   Object.entries({
     classification: "classification",
-    class: "classification",
+    type: "item_type",
+    item_type: "item_type",
+    class: "series_code",
+    series_code: "series_code",
     series: "series",
+    status: "source_status",
+    dept: "department",
+    department: "department",
+    unit: "unit",
+    oem: "oem",
+    brand: "brand",
     model_number: "model_number",
     modelnumber: "model_number",
     model: "model_number",
-    item_no: "model_number",
-    item_number: "model_number",
-    itemno: "model_number",
+    item_no: "part_number",
+    item_number: "part_number",
+    itemno: "part_number",
     part_number: "part_number",
     part: "part_number",
     part_no: "part_number",
     part_number_alt: "part_number",
     description: "description",
+    normalized_description: "description",
+    oms_description1: "specs",
+    oms_description2: "notes",
     canopy_color_color: "canopy_color",
     canopy_color: "canopy_color",
     color: "canopy_color",
     frame_color: "frame_color",
     cost: "cost",
+    advaning_price: "cost",
+    oms_price: "retail",
+    qty_price1: "retail",
     carrier_type: "carrier_type",
     carrier: "carrier_type",
     product_weight_lb: "product_weight_lb",
     product_weight_lbs: "product_weight_lb",
+    qty_wt: "product_weight_lb",
+    qty_weight: "product_weight_lb",
     gross_weight_lb: "gross_weight_lb",
+    width_in: "carton_1_width",
+    depth_in: "carton_1_depth",
+    height_in: "carton_1_height",
     carton_1_width_inches: "carton_1_width",
     carton_1_width: "carton_1_width",
     carton_1_depth_inches_length: "carton_1_depth",
@@ -90,18 +119,26 @@ const HEADER_ALIASES = new Map(
     carton_1_height_inches: "carton_1_height",
     carton_1_height: "carton_1_height",
     cubic_feet: "cubic_feet",
+    cubic_ft: "cubic_feet",
     pallet_size: "pallet_size",
+    pallet_size_in: "pallet_size",
     pallet_lbs: "pallet_weight_lb",
     pallet_weight_lb: "pallet_weight_lb",
+    pallet_weight_lbs: "pallet_weight_lb",
+    pallet_weight: "pallet_weight_lb",
     total_product_pallet_weight_lb: "total_product_pallet_weight_lb",
+    total_product_pallet_weight: "total_product_pallet_weight_lb",
+    total_product_plus_pallet_weight: "total_product_pallet_weight_lb",
     shipping_dims: "shipping_dims",
     shipping_dimensions: "shipping_dims",
     ships_via: "ships_via",
     retail: "retail",
     q3_2025_retail: "q3_2025_retail",
     specs: "specs",
+    size: "specs",
     pictures: "pictures",
     notes: "notes",
+    notes2: "notes2",
     location: "location",
     inventory: "inventory",
     in_shop: "inventory",
@@ -167,12 +204,8 @@ function main() {
 
   const workbookBytes = fs.readFileSync(workbookPath);
   const workbook = XLSX.read(workbookBytes, { type: "buffer", cellDates: false });
-  const sheetName = workbook.SheetNames.includes("OMS_inventory")
-    ? "OMS_inventory"
-    : workbook.SheetNames.includes("oms_inventory")
-      ? "oms_inventory"
-      : "";
-  if (!sheetName) throw new Error("Workbook must contain an OMS_inventory sheet.");
+  const sheetName = inventorySheetName(workbook.SheetNames);
+  if (!sheetName) throw new Error("Workbook must contain an OMS_inventory/masterlist sheet or one uploadable sheet.");
 
   const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "", blankrows: false });
   const existingConfig = readExistingConfig();
@@ -194,6 +227,15 @@ function main() {
   );
 }
 
+function inventorySheetName(sheetNames) {
+  return (
+    sheetNames.find((name) => name === "OMS_inventory") ||
+    sheetNames.find((name) => name.toLowerCase() === "oms_inventory") ||
+    sheetNames.find((name) => name.toLowerCase() === "masterlist") ||
+    (sheetNames.length === 1 ? sheetNames[0] : "")
+  );
+}
+
 function readExistingConfig() {
   const jsonPath = path.join(outputDir, "oms_inventory.json");
   if (!fs.existsSync(jsonPath)) return normalizeConfig();
@@ -209,16 +251,20 @@ function createDatasetFromAoa(aoa, meta) {
   if (!aoa.length) throw new Error("OMS_inventory sheet is empty.");
 
   const normalizedHeaders = normalizeHeaders(aoa[0]);
-  const missingCoreHeaders = ["model_number", "description", "classification"].filter(
+  const missingCoreHeaders = ["description", "classification"].filter(
     (field) => !normalizedHeaders.canonicalHeaders.includes(field),
   );
+  if (!normalizedHeaders.canonicalHeaders.includes("model_number") && !normalizedHeaders.canonicalHeaders.includes("part_number")) {
+    missingCoreHeaders.unshift("model_number/part_number");
+  }
   if (missingCoreHeaders.length) {
     throw new Error(`Missing required source headers after normalization: ${missingCoreHeaders.join(", ")}`);
   }
 
+  const context = {};
   const rows = aoa
     .slice(1)
-    .map((row, index) => normalizeRecord(row, normalizedHeaders, index + 2, meta))
+    .map((row, index) => normalizeRecord(row, normalizedHeaders, index + 2, meta, context))
     .filter((record) => record.model_number || record.part_number);
 
   const dataset = {
@@ -229,9 +275,11 @@ function createDatasetFromAoa(aoa, meta) {
       source_file_name: meta.source_file_name,
       generated_at: meta.generated_at,
       source_rule:
-        "Awnings, parts, accessories, replacement components, shipping/packaging items, and review records are filters over one normalized oms_inventory table.",
+        "Awnings, parts, accessories, replacement components, shipping/packaging items, and review records are filters over one normalized oms_inventory table. Uploads may come from OMS_inventory or masterlist.",
       classification_rule:
         "Awnings are controlled by app_config.awning_classifications. Other warehouse sections filter the same records.",
+      relationship_rule:
+        "Series/class codes from masterlist create parent-child reference links from series groups to awnings, parts, fabrics, and accessories.",
     },
     app_config: normalizeConfig(meta.app_config),
     required_searchable_fields: REQUIRED_FIELDS,
@@ -239,6 +287,7 @@ function createDatasetFromAoa(aoa, meta) {
     source_header_map: normalizedHeaders.sourceHeaderMap,
     missing_source_headers: normalizedHeaders.missingSourceHeaders,
     rows: assignRecordKeys(rows),
+    relationships: [],
   };
 
   applyConfigToRows(dataset);
@@ -263,11 +312,12 @@ function normalizeHeaders(headerRow) {
   return { canonicalHeaders, sourceHeaderMap, missingSourceHeaders };
 }
 
-function normalizeRecord(row, headers, sourceRowNumber, meta) {
+function normalizeRecord(row, headers, sourceRowNumber, meta, context = {}) {
   const base = {};
   headers.canonicalHeaders.forEach((header, index) => {
     base[header] = cleanCell(row[index]);
   });
+  applyGroupedContext(base, context);
 
   const record = {};
   OUTPUT_FIELDS.forEach((field) => {
@@ -277,7 +327,10 @@ function normalizeRecord(row, headers, sourceRowNumber, meta) {
   record.model_number = cleanCell(record.model_number);
   record.source_classification = cleanCell(record.classification);
   record.classification = cleanCell(record.classification);
-  record.description = cleanCell(record.description || record.canopy_color);
+  record.item_type = cleanCell(record.item_type);
+  record.series_code = cleanCell(record.series_code || inferSeriesCode(record.model_number || record.part_number));
+  record.series = cleanCell(record.series || seriesFromCode(record.series_code));
+  record.description = cleanCell(record.description || record.specs || record.notes || record.canopy_color);
   record.part_number = cleanCell(record.part_number || (record.classification.toLowerCase() === "awning" ? "" : record.model_number));
   record.shipping_dims = cleanCell(record.shipping_dims || makeShippingDims(record));
   fillCartonDimsFromShippingDims(record);
@@ -288,6 +341,17 @@ function normalizeRecord(row, headers, sourceRowNumber, meta) {
   record.source_row_number = sourceRowNumber;
   record.match_key = record.part_number || record.model_number || `row_${sourceRowNumber}`;
   return record;
+}
+
+function applyGroupedContext(record, context) {
+  const shouldFillFromGroup = !cleanCell(record.model_number) && cleanCell(record.part_number);
+  GROUPED_CONTEXT_FIELDS.forEach((field) => {
+    if (cleanCell(record[field])) {
+      context[field] = cleanCell(record[field]);
+    } else if (shouldFillFromGroup && context[field]) {
+      record[field] = context[field];
+    }
+  });
 }
 
 function assignRecordKeys(rows) {
@@ -319,7 +383,70 @@ function applyConfigToRows(dataset) {
     row.review_needed = row.missing_fields.length > 0 || row.warehouse_category === "Unknown / Review Needed";
     row.review_notes = reviewNotes(row);
   });
+  dataset.relationships = buildSeriesRelationships(dataset.rows);
+  dataset.relationship_summary = summarizeRelationships(dataset.relationships);
   dataset.summary = summarize(dataset.rows);
+}
+
+function buildSeriesRelationships(rows) {
+  return rows
+    .map((row) => {
+      const seriesCode = cleanCell(row.series_code || inferSeriesCode(row.model_number || row.part_number));
+      const series = cleanCell(row.series || seriesFromCode(seriesCode));
+      if (!seriesCode && !series) return null;
+      return {
+        parent_type: "series",
+        parent_key: `series:${normalizeKey(seriesCode || series)}`,
+        parent_label: series || seriesCode,
+        child_key: row.record_key,
+        child_model_number: cleanCell(row.model_number || row.part_number),
+        relationship_type: row.warehouse_category === "Awnings" ? "series_awning" : "series_component",
+        series_code: seriesCode,
+        series,
+        item_type: cleanCell(row.item_type),
+        classification: cleanCell(row.classification),
+        source: "masterlist_grouping",
+        source_row_number: row.source_row_number,
+      };
+    })
+    .filter(Boolean);
+}
+
+function summarizeRelationships(relationships) {
+  return relationships.reduce(
+    (summary, relationship) => {
+      summary.total += 1;
+      summary.by_parent[relationship.parent_key] = (summary.by_parent[relationship.parent_key] || 0) + 1;
+      summary.by_type[relationship.relationship_type] = (summary.by_type[relationship.relationship_type] || 0) + 1;
+      return summary;
+    },
+    { total: 0, by_parent: {}, by_type: {} },
+  );
+}
+
+function inferSeriesCode(value) {
+  const text = cleanCell(value).toUpperCase();
+  const match = text.match(/(?:^|[-_ ])(FS|SG|GA|PA|PN|PS|AC|DA|P|L|C|S)(?=\d|[-_ ]|$)/);
+  return match ? match[1] : "";
+}
+
+function seriesFromCode(code) {
+  const value = cleanCell(code).toUpperCase();
+  const seriesNames = {
+    P: "Prestige Series",
+    L: "Luxury Series",
+    C: "Classic Series",
+    FS: "Free Standing Series",
+    SG: "Slim Gray Series",
+    GA: "Glass Awning",
+    PA: "Polycarbonate Aluminum",
+    PN: "Polycarbonate Nylon",
+    PS: "Polycarbonate Steel",
+    AC: "Awning Cover",
+    DA: "Door Awning",
+    S: "Slim Series",
+  };
+  return seriesNames[value] || "";
 }
 
 function normalizeConfig(config = {}) {
@@ -368,6 +495,7 @@ function stockStatus(value) {
 
 function requiredMissingFields(record) {
   return REQUIRED_FIELDS.filter((field) => {
+    if (field === "model_number" && cleanCell(record.part_number)) return false;
     if (field === "part_number" && record.warehouse_category === "Awnings") return false;
     return cleanCell(record[field]) === "";
   });
