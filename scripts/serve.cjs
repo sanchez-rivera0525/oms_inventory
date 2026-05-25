@@ -8,6 +8,7 @@ const path = require("node:path");
 const port = Number(process.argv[2] || 4176);
 const host = process.env.HOST || "0.0.0.0";
 const root = path.resolve(__dirname, "..");
+const basePath = normalizeBasePath(process.argv[3] || process.env.BASE_PATH || "");
 const dataDir = path.join(root, "data");
 const jsonPath = path.join(dataDir, "oms_inventory.json");
 const csvPath = path.join(dataDir, "oms_inventory.csv");
@@ -67,7 +68,8 @@ server.listen(port, host, () => {
 });
 
 function serveStatic(url, response) {
-  const requestedPath = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
+  const pathname = stripBasePath(url.pathname);
+  const requestedPath = decodeURIComponent(pathname === "/" ? "/index.html" : pathname);
   let filePath = path.resolve(root, `.${requestedPath}`);
 
   if (!filePath.startsWith(root)) {
@@ -80,6 +82,18 @@ function serveStatic(url, response) {
   }
 
   sendFile(response, filePath, types[path.extname(filePath)] || "application/octet-stream");
+}
+
+function stripBasePath(pathname) {
+  if (!basePath) return pathname;
+  if (pathname === basePath) return "/";
+  return pathname.startsWith(`${basePath}/`) ? pathname.slice(basePath.length) : pathname;
+}
+
+function normalizeBasePath(value) {
+  const normalized = String(value || "").trim().replace(/\/+$/, "");
+  if (!normalized || normalized === "/") return "";
+  return normalized.startsWith("/") ? normalized : `/${normalized}`;
 }
 
 function networkUrls(serverPort) {

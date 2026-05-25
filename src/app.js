@@ -2,6 +2,8 @@ const API_DATA_URL = "/api/inventory";
 const API_IMPORT_URL = "/api/import";
 const API_CONFIG_URL = "/api/config";
 const API_NETWORK_URL = "/api/network";
+const BASE_PATH = detectBasePath();
+const STATIC_DATA_URL = assetUrl("data/oms_inventory.json");
 
 const REQUIRED_FIELDS = [
   "model_number",
@@ -545,10 +547,20 @@ function bindEvents() {
 }
 
 async function fetchInventory() {
-  const response = await fetch(API_DATA_URL, { cache: "no-store" });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "Unable to load OMS inventory data.");
-  return payload;
+  const storedDataset = readStaticDataset();
+  if (storedDataset) return storedDataset;
+
+  try {
+    const response = await fetch(API_DATA_URL, { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "API inventory unavailable.");
+    return payload;
+  } catch (_apiError) {
+    const response = await fetch(STATIC_DATA_URL, { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Unable to load OMS inventory data.");
+    return payload;
+  }
 }
 
 async function fetchNetworkLinks() {
@@ -1439,7 +1451,7 @@ function setQuickFilter(filter) {
   const nextFilter = QUICK_FILTER_LABELS[filter] ? filter : "all";
   state.quickFilter = state.quickFilter === nextFilter && nextFilter !== "all" ? "all" : nextFilter;
   state.view = "search";
-  window.history.pushState({}, "", "/search");
+  window.history.pushState({}, "", routeForView("search"));
   render();
 }
 
@@ -1458,8 +1470,8 @@ function viewFromPath(pathname) {
 }
 
 function routeForView(view) {
-  if (view === "reflect") return "/audit";
-  return view === "search" ? "/search" : `/${view}`;
+  const path = view === "reflect" ? "/audit" : view === "search" ? "/search" : `/${view}`;
+  return withBasePath(path);
 }
 
 function selectedRow() {
@@ -1630,6 +1642,11 @@ async function saveCurrentDataset(url, successMessage, importSummary = null) {
     setSaveStatus(successMessage);
     render();
   } catch (error) {
+    if (writeStaticDataset(state.dataset)) {
+      setSaveStatus(`${successMessage} Browser only.`);
+      render();
+      return;
+    }
     setSaveStatus(error.message);
   }
 }
@@ -2522,6 +2539,68 @@ function mergeUnique(values) {
     output.push(text);
   });
   return output;
+}
+
+function detectBasePath() {
+  if (typeof window === "undefined" || typeof document === "undefined") return "";
+  const explicit = document.documentElement?.dataset?.basePath;
+  if (explicit) return normalizeBasePath(explicit);
+
+  const script = document.querySelector('script[src*="src/app.js"]');
+  const rawSrc = script?.getAttribute("src") || "";
+  if (rawSrc) {
+    const scriptUrl = new URL(rawSrc, window.location.href);
+    const marker = "/src/app.js";
+    if (scriptUrl.pathname.endsWith(marker)) {
+      return normalizeBasePath(scriptUrl.pathname.slice(0, -marker.length));
+    }
+  }
+
+  if (window.location.hostname.endsWith("github.io")) {
+    const [repoName] = window.location.pathname.split("/").filter(Boolean);
+    return repoName ? `/${repoName}` : "";
+  }
+
+  return "";
+}
+
+function normalizeBasePath(value) {
+  const trimmed = String(value || "").trim().replace(/\/+$/, "");
+  if (!trimmed || trimmed === "/") return "";
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+}
+
+function assetUrl(path) {
+  return `${BASE_PATH}/${String(path || "").replace(/^\/+/, "")}`;
+}
+
+function withBasePath(path) {
+  const nextPath = String(path || "/");
+  if (!BASE_PATH) return nextPath;
+  if (nextPath === BASE_PATH || nextPath.startsWith(`${BASE_PATH}/`)) return nextPath;
+  return `${BASE_PATH}${nextPath.startsWith("/") ? nextPath : `/${nextPath}`}`;
+}
+
+function staticDatasetKey() {
+  return `oms_inventory_dataset:${BASE_PATH || "root"}`;
+}
+
+function readStaticDataset() {
+  try {
+    const stored = window.localStorage?.getItem(staticDatasetKey());
+    return stored ? JSON.parse(stored) : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function writeStaticDataset(dataset) {
+  try {
+    window.localStorage?.setItem(staticDatasetKey(), JSON.stringify(dataset));
+    return true;
+  } catch (_error) {
+    return false;
+  }
 }
 
 function cleanCell(value) {
