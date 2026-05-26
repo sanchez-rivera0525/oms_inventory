@@ -49,6 +49,7 @@ export default async function InventoryPage() {
 
           <div className="sidebar-footer">
             <div id="networkLinks" className="network-links" aria-label="Open on phone" />
+            <CoveEaster />
             <div className="account-area">
               {isClerkConfigured() ? <UserButton afterSignOutUrl="/sign-in" /> : <span>Local dev</span>}
             </div>
@@ -158,6 +159,21 @@ export default async function InventoryPage() {
 
       <InventoryBoot />
     </>
+  );
+}
+
+function CoveEaster() {
+  return (
+    <div className="cove-easter" title="Draco Cove">
+      <svg className="cove-sigil" viewBox="0 0 74 24" aria-hidden="true" focusable="false">
+        <path className="cove-dragon" d="M5 15 C10 7 18 5 24 11 C21 11 19 13 17 16 C22 16 27 18 31 21" />
+        <path className="cove-dragon cove-detail" d="M16 7 L19 3 L21 9 M24 11 L31 8 L28 14" />
+        <path className="cove-gem" d="M38 10 L41 13 L38 16 L35 13 Z" />
+        <path className="cove-kitty" d="M45 17 C42 15 42 10 45 8 L48 11 L52 11 L55 8 C58 10 58 15 55 17 C52 19 48 19 45 17 Z" />
+        <path className="cove-kitty cove-detail" d="M48 15 H48.1 M53 15 H53.1 M50.5 16.5 L50.5 17.2" />
+      </svg>
+      <span className="cove-word">cove</span>
+    </div>
   );
 }
 
