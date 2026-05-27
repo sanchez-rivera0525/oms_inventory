@@ -683,7 +683,7 @@ function renderSearch() {
   const queryLabel = state.query ? ` for "${escapeHtml(state.query)}"` : "";
   const filterLabel = state.quickFilter === "all" ? "" : ` · ${QUICK_FILTER_LABELS[state.quickFilter]}`;
   els.searchSubtitle.textContent = `${formatNumber(rows.length)} SKU lines${state.query ? "" : " in working set"}${filterLabel}.`;
-  els.searchPills.innerHTML = renderSearchPills(rows);
+  els.searchPills.innerHTML = renderActiveSearchState(rows);
   els.searchContent.innerHTML = `
     <div class="table-toolbar">
       <div>
@@ -691,14 +691,11 @@ function renderSearch() {
         <span>SKU lines${queryLabel}</span>
       </div>
       <div class="toolbar-actions">
-        <button class="secondary-action ${state.quickFilter === "key_gaps" ? "active" : ""}" type="button" data-quick-filter="key_gaps">Cannot Ship</button>
-        <button class="secondary-action ${state.quickFilter === "oversized" ? "active" : ""}" type="button" data-quick-filter="oversized">Freight Review</button>
         ${state.quickFilter !== "all" ? `<button class="secondary-action" type="button" data-quick-filter="all">Clear Filter</button>` : ""}
         <button class="secondary-action" type="button" data-view-action="compare">Load Compare ${state.compareKeys.length}/3</button>
         <button class="secondary-action" type="button" data-view-action="reflect">Validation Queue</button>
       </div>
     </div>
-    ${renderOpsBrief(rows)}
     <div class="results-table-wrap">
       <table class="data-table">
         <thead>
@@ -719,6 +716,14 @@ function renderSearch() {
     </div>
     ${rows.length > visible.length ? `<div class="table-foot">Showing first ${visible.length} SKU lines. Refine lookup for tighter picks.</div>` : ""}
   `;
+}
+
+function renderActiveSearchState(rows) {
+  if (state.quickFilter === "all" && !state.query) return "";
+  const pieces = [];
+  if (state.quickFilter !== "all") pieces.push(QUICK_FILTER_LABELS[state.quickFilter]);
+  if (state.query) pieces.push(`Find: ${state.query}`);
+  return `<span class="soft-pill active">${escapeHtml(pieces.join(" / "))}</span><span class="soft-pill">${formatNumber(rows.length)} lines</span>`;
 }
 
 function renderOpsBrief(rows) {
@@ -745,20 +750,6 @@ function renderOpsBriefMetric(filter, label, value, detail, tone) {
       <strong>${formatNumber(value)}</strong>
       <small>${escapeHtml(detail)}</small>
     </button>
-  `;
-}
-
-function renderSearchPills(rows) {
-  const carriers = new Set(rows.map((row) => displayText(row.carrier_type)).filter(Boolean));
-  const cannotShipCount = rows.filter(cannotShip).length;
-  const freightReviewCount = rows.filter(isOversized).length;
-  const carrierCheckCount = rows.filter((row) => hasInvalidCarrierAssignment(row) || hasConflictingShippingData(row)).length;
-  return `
-    ${state.quickFilter !== "all" ? `<span class="soft-pill active">${escapeHtml(QUICK_FILTER_LABELS[state.quickFilter])}</span>` : ""}
-    <span class="soft-pill">${formatNumber(cannotShipCount)} cannot ship</span>
-    <span class="soft-pill">${formatNumber(freightReviewCount)} freight review</span>
-    <span class="soft-pill">${formatNumber(carrierCheckCount)} carrier check</span>
-    <span class="soft-pill">${carriers.size} carrier lanes</span>
   `;
 }
 

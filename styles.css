@@ -461,6 +461,10 @@ body[data-current-view="compare"] .detail-panel {
   padding: 16px;
 }
 
+body:not([data-current-view="search"]) .quick-stats {
+  display: none;
+}
+
 .stat-cell {
   min-width: 0;
   min-height: 78px;
