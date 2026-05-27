@@ -91,6 +91,8 @@ The app also has an `Inventory Update / Import` section for uploading a newer `.
 
 Awning classes and per-item classification overrides are saved in `app_config` inside `data/oms_inventory.json`.
 
+For the full operational import/export rules, audit trail requirements, round-trip workflow, and validation checklist, see [OMS Inventory Import and Export Guidebook](docs/import-export-guidebook.md).
+
 ## Test
 
 ```powershell
