@@ -34,6 +34,11 @@ const EXTRA_FIELDS = [
   "source_file_name",
   "source_sheet_name",
   "source_row_number",
+  "reviewed_by",
+  "reviewed_at",
+  "edited_by",
+  "edited_at",
+  "data_edit_source",
   "record_key",
   "match_key",
   "source_classification",
@@ -139,6 +144,7 @@ const QUICK_FILTER_LABELS = {
 
 const BLANK_DISPLAY = "—";
 const PLACEHOLDER_VALUES = new Set(["data pending verification", "pending verification", "needs verification", "n/a", "na", "tbd"]);
+const OPERATOR_PREF_KEY = "oms_inventory_operator_name";
 
 const EDITABLE_FIELDS = [
   { field: "carton_1_width", label: "Width", type: "number", group: "Ship Dims" },
@@ -266,6 +272,15 @@ const HEADER_ALIASES = new Map(
     series_code: "series_code",
     series: "series",
     status: "source_status",
+    reviewed_by: "reviewed_by",
+    reviewed_at: "reviewed_at",
+    reviewed_timestamp: "reviewed_at",
+    edited_by: "edited_by",
+    edited_at: "edited_at",
+    edited_timestamp: "edited_at",
+    data_edit_source: "data_edit_source",
+    edit_source: "data_edit_source",
+    source_of_data_edits: "data_edit_source",
     dept: "department",
     department: "department",
     unit: "unit",
@@ -535,6 +550,20 @@ function bindEvents() {
       return;
     }
 
+    const exportAction = event.target.closest("[data-export-format]");
+    if (exportAction) {
+      event.preventDefault();
+      exportInventoryData(exportAction.dataset.exportFormat);
+      return;
+    }
+
+    const markReviewed = event.target.closest("[data-mark-reviewed]");
+    if (markReviewed) {
+      event.preventDefault();
+      await markSelectedReviewed();
+      return;
+    }
+
     const copySummary = event.target.closest("[data-copy-summary]");
     if (copySummary) {
       event.preventDefault();
@@ -736,6 +765,8 @@ function renderSearch() {
       </div>
       <div class="toolbar-actions">
         ${state.quickFilter !== "all" ? `<button class="secondary-action" type="button" data-quick-filter="all">Clear Filter</button>` : ""}
+        <button class="secondary-action" type="button" data-export-format="csv">Export CSV</button>
+        <button class="secondary-action" type="button" data-export-format="json">Export JSON</button>
         <button class="secondary-action" type="button" data-view-action="compare">Load Compare ${state.compareKeys.length}/3</button>
         <button class="secondary-action" type="button" data-view-action="reflect">Validation Queue</button>
       </div>
@@ -1103,6 +1134,7 @@ function renderSelectedPanel() {
       </div>
       <div class="item-actions">
         <button class="secondary-action" type="button" data-copy-summary>Copy Ship Note</button>
+        <button class="secondary-action" type="button" data-mark-reviewed>Mark Reviewed</button>
         <button class="secondary-action" type="button" data-compare-key="${escapeAttr(row.record_key)}">
           ${state.compareKeys.includes(row.record_key) ? "Staged" : "Stage Compare"}
         </button>
@@ -1115,6 +1147,7 @@ function renderSelectedPanel() {
       <div><span>Ship weight</span><strong>${formatFieldValue(row.product_weight_lb)}</strong></div>
     </div>
     ${renderShippingCall(row)}
+    ${renderAuditTrail(row)}
     ${renderSkuPictures(row)}
     ${renderRelationshipLeads(row)}
     ${renderOperationalMemory(row)}
@@ -1137,6 +1170,23 @@ function renderShippingCall(row) {
         <div><span>Load weight</span><strong>${escapeHtml(loadWeight.label)}</strong></div>
         <div><span>Packaging</span><strong>${formatFieldValue(row.ships_via || row.carrier_type)}</strong></div>
         <div><span>Next check</span><strong>${escapeHtml(decision.nextCheck)}</strong></div>
+      </div>
+    </section>
+  `;
+}
+
+function renderAuditTrail(row) {
+  return `
+    <section class="ops-card audit-trail">
+      <div class="ops-card-title">
+        <h3>Data Trail</h3>
+        <span>${escapeHtml(displayText(row.data_edit_source) || "upload")}</span>
+      </div>
+      <div class="ops-detail-grid">
+        <div><span>Edited by</span><strong>${formatFieldValue(row.edited_by)}</strong></div>
+        <div><span>Edited at</span><strong>${escapeHtml(formatDate(row.edited_at))}</strong></div>
+        <div><span>Reviewed by</span><strong>${formatFieldValue(row.reviewed_by)}</strong></div>
+        <div><span>Reviewed at</span><strong>${escapeHtml(formatDate(row.reviewed_at))}</strong></div>
       </div>
     </section>
   `;
@@ -1687,18 +1737,33 @@ async function saveSelectedEdit() {
     return;
   }
 
+  const now = new Date().toISOString();
   EDITABLE_FIELDS.forEach(({ field }) => {
     row[field] = cleanCell(state.editDraft.values[field]);
   });
   row.shipping_dims = cleanCell(row.shipping_dims);
   if (!hasDimensionNumbers(row.shipping_dims)) row.shipping_dims = makeShippingDims(row);
-  row.last_updated = new Date().toISOString();
+  stampRowEdit(row, "in_app", now);
   refreshRowDerived(row, state.dataset.app_config);
   state.dataset.summary = summarizeRows(state.dataset.rows);
   state.editDraft = null;
   state.editDirty = false;
   render();
   await saveCurrentDataset(API_CONFIG_URL, "Item saved.");
+}
+
+async function markSelectedReviewed() {
+  const row = selectedRow();
+  if (!row) return;
+  const now = new Date().toISOString();
+  row.reviewed_by = currentOperator("Reviewed by");
+  row.reviewed_at = now;
+  row.data_edit_source = "in_app";
+  row.last_updated = now;
+  refreshRowDerived(row, state.dataset.app_config);
+  state.dataset.summary = summarizeRows(state.dataset.rows);
+  render();
+  await saveCurrentDataset(API_CONFIG_URL, "Review saved.");
 }
 
 function resetEditDraft() {
@@ -1734,6 +1799,93 @@ async function saveCurrentDataset(url, successMessage, importSummary = null) {
     }
     setSaveStatus(error.message);
   }
+}
+
+function exportInventoryData(format = "csv") {
+  if (!state.dataset?.rows?.length) {
+    setSaveStatus("No data to export.");
+    return;
+  }
+  const snapshot = exportDatasetSnapshot();
+  const timestamp = fileTimestamp(new Date());
+  if (format === "json") {
+    downloadText(`oms_inventory_export_${timestamp}.json`, `${JSON.stringify(snapshot, null, 2)}\n`, "application/json");
+  } else {
+    downloadText(`oms_inventory_export_${timestamp}.csv`, toCsv(snapshot.fields, snapshot.rows), "text/csv");
+  }
+  setSaveStatus(state.editDirty ? "Exported with unsaved draft." : "Export ready.");
+}
+
+function exportDatasetSnapshot() {
+  const snapshot = JSON.parse(JSON.stringify(state.dataset));
+  snapshot.fields = mergeUnique([...(snapshot.fields || []), ...OUTPUT_FIELDS]);
+  if (state.editDirty && state.editDraft) {
+    const row = snapshot.rows.find((item) => item.record_key === state.editDraft.recordKey);
+    if (row) {
+      Object.entries(state.editDraft.values).forEach(([field, value]) => {
+        row[field] = cleanCell(value);
+      });
+      row.shipping_dims = cleanCell(row.shipping_dims);
+      if (!hasDimensionNumbers(row.shipping_dims)) row.shipping_dims = makeShippingDims(row);
+      stampRowEdit(row, "in_app", new Date().toISOString());
+      refreshRowDerived(row, snapshot.app_config);
+    }
+  }
+  snapshot.metadata = {
+    ...(snapshot.metadata || {}),
+    exported_at: new Date().toISOString(),
+    export_source: state.editDirty ? "in_app_with_unsaved_draft" : "in_app",
+  };
+  return snapshot;
+}
+
+function stampRowEdit(row, source, timestamp = new Date().toISOString()) {
+  row.edited_by = currentOperator("Edited by");
+  row.edited_at = timestamp;
+  row.data_edit_source = source;
+  row.last_updated = timestamp;
+}
+
+function currentOperator(promptLabel = "Operator") {
+  try {
+    const stored = cleanCell(window.localStorage?.getItem(OPERATOR_PREF_KEY));
+    if (stored) return stored;
+    const entered = cleanCell(window.prompt(`${promptLabel}:`, "local_ops"));
+    const operator = entered || "local_ops";
+    window.localStorage?.setItem(OPERATOR_PREF_KEY, operator);
+    return operator;
+  } catch (_error) {
+    return "local_ops";
+  }
+}
+
+function downloadText(fileName, text, mimeType) {
+  const blob = new Blob([text], { type: `${mimeType};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function toCsv(fields, rows) {
+  const lines = [fields.map(csvCell).join(",")];
+  rows.forEach((row) => {
+    lines.push(fields.map((field) => csvCell(Array.isArray(row[field]) ? row[field].join("; ") : row[field])).join(","));
+  });
+  return `${lines.join("\n")}\n`;
+}
+
+function csvCell(value) {
+  const text = cleanCell(value);
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function fileTimestamp(date) {
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
 }
 
 async function importFile(file) {
@@ -2083,6 +2235,7 @@ function normalizeRecordObject(input, sourceRowNumber, meta = {}) {
   if (!hasDimensionNumbers(record.shipping_dims)) record.shipping_dims = makeShippingDims(record);
   fillCartonDimsFromShippingDims(record);
   record.last_updated = cleanCell(record.last_updated || meta.generated_at || new Date().toISOString());
+  record.data_edit_source = cleanCell(record.data_edit_source || "upload");
   record.source_file_name = cleanCell(record.source_file_name || meta.source_file_name || "Unknown source");
   record.source_sheet_name = cleanCell(record.source_sheet_name || meta.source_sheet_name || "OMS_inventory");
   record.source_row_number = Number(record.source_row_number || sourceRowNumber || 0);

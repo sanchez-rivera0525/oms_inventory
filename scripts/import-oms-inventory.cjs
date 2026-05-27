@@ -37,6 +37,11 @@ const EXTRA_FIELDS = [
   "source_file_name",
   "source_sheet_name",
   "source_row_number",
+  "reviewed_by",
+  "reviewed_at",
+  "edited_by",
+  "edited_at",
+  "data_edit_source",
   "record_key",
   "match_key",
   "source_classification",
@@ -88,6 +93,15 @@ const HEADER_ALIASES = new Map(
     series_code: "series_code",
     series: "series",
     status: "source_status",
+    reviewed_by: "reviewed_by",
+    reviewed_at: "reviewed_at",
+    reviewed_timestamp: "reviewed_at",
+    edited_by: "edited_by",
+    edited_at: "edited_at",
+    edited_timestamp: "edited_at",
+    data_edit_source: "data_edit_source",
+    edit_source: "data_edit_source",
+    source_of_data_edits: "data_edit_source",
     dept: "department",
     department: "department",
     unit: "unit",
@@ -554,6 +568,7 @@ function normalizeRecord(row, headers, sourceRowNumber, meta, context = {}) {
   fillCartonDimsFromShippingDims(record);
   record.inventory = cleanCell(record.inventory);
   record.last_updated = meta.generated_at;
+  record.data_edit_source = cleanCell(record.data_edit_source || "upload");
   record.source_file_name = meta.source_file_name;
   record.source_sheet_name = meta.source_sheet_name;
   record.source_row_number = sourceRowNumber;

@@ -27,6 +27,7 @@ const required = [
   "inventory",
   "ships_via",
 ];
+const auditFields = ["reviewed_by", "reviewed_at", "edited_by", "edited_at", "data_edit_source"];
 
 assert(data.table_name === "oms_inventory", "table must be named oms_inventory");
 const sourceSheetName = String(data.metadata.source_sheet_name || "").toLowerCase();
@@ -42,6 +43,10 @@ assert(Array.isArray(data.app_config.awning_classifications), "awning class conf
 required.forEach((field) => {
   assert(data.fields.includes(field), `${field} missing from normalized fields`);
   assert(data.required_searchable_fields.includes(field), `${field} missing from searchable fields`);
+});
+
+auditFields.forEach((field) => {
+  assert(data.fields.includes(field), `${field} missing from normalized fields`);
 });
 
 ["Awnings", "Parts", "Accessories", "Replacement Components", "Shipping/Packaging Items", "Unknown / Review Needed"].forEach(
@@ -69,6 +74,8 @@ assert(awning.reference_sources.includes("database"), "master lookup rows should
 assert(data.metadata.reference_counts?.database >= 700, "database reference sheet should be indexed");
 assert(data.metadata.reference_counts?.frontend >= 600, "frontend canonical reference sheet should be indexed");
 assert(data.rows.filter((row) => row.missing_from_master_lookup).length >= 150, "missing master_lookup SKUs should be recovered");
+assert(data.rows.every((row) => row.data_edit_source), "each row should expose data_edit_source for export auditing");
+assert(data.rows.every((row) => ["upload", "in_app", "in_app_with_unsaved_draft"].includes(row.data_edit_source)), "data_edit_source values should be controlled");
 
 const recovered = data.rows.find((row) => row.model_number === "EA1008-A222H");
 assert(recovered, "expected database-only EA1008-A222H recovery row");
@@ -87,6 +94,9 @@ assert(normalizeDims(part.shipping_dims) === "4x7x3", "ZLA-WMB-B1 dimensions sho
 assert(fs.existsSync(csvPath), "CSV export must exist");
 const csv = fs.readFileSync(csvPath, "utf8");
 assert(csv.includes("record_key"), "CSV should include record_key");
+auditFields.forEach((field) => {
+  assert(csv.split("\n")[0].includes(field), `CSV should include ${field}`);
+});
 
 console.log(
   `Data check passed: ${data.rows.length} rows, ${data.summary.categories.Awnings || 0} awnings, ${
