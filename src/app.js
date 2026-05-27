@@ -767,9 +767,6 @@ function renderSearch() {
       </div>
       <div class="toolbar-actions">
         ${state.quickFilter !== "all" ? `<button class="secondary-action" type="button" data-quick-filter="all">Clear Filter</button>` : ""}
-        <button class="secondary-action" type="button" data-export-format="xlsx">Export XLSX</button>
-        <button class="secondary-action" type="button" data-export-format="csv">Export CSV</button>
-        <button class="secondary-action" type="button" data-export-format="json">Export JSON</button>
         <button class="secondary-action" type="button" data-view-action="compare">Load Compare ${state.compareKeys.length}/3</button>
         <button class="secondary-action" type="button" data-view-action="reflect">Validation Queue</button>
       </div>
