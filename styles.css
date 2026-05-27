@@ -98,6 +98,10 @@ h3 {
   background: var(--workspace);
 }
 
+body.sidebar-collapsed .app-frame {
+  grid-template-columns: 68px minmax(0, 1fr);
+}
+
 .topbar {
   position: sticky;
   top: 0;
@@ -116,16 +120,81 @@ h3 {
   backdrop-filter: none;
 }
 
+.panel-toggle {
+  display: inline-grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border: 1px solid rgba(217, 184, 255, 0.26);
+  border-radius: 7px;
+  background: rgba(15, 12, 23, 0.72);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.panel-toggle:hover,
+.panel-toggle:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.sidebar-toggle {
+  position: absolute;
+  top: 18px;
+  right: 8px;
+  z-index: 2;
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  padding-right: 24px;
   color: var(--ink);
   font-size: 13px;
   font-weight: 900;
   letter-spacing: 0.02em;
   text-decoration: none;
   white-space: nowrap;
+}
+
+body.sidebar-collapsed .topbar {
+  align-items: center;
+  gap: 14px;
+  padding-inline: 10px;
+}
+
+body.sidebar-collapsed .brand {
+  justify-content: center;
+  width: 100%;
+  padding-right: 0;
+}
+
+body.sidebar-collapsed .brand > span:not(.brand-mark),
+body.sidebar-collapsed .nav-section-label,
+body.sidebar-collapsed .sidebar-footer {
+  display: none;
+}
+
+body.sidebar-collapsed .tabs a,
+body.sidebar-collapsed .utility-link {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: 10px 8px;
+  font-size: 0;
+}
+
+body.sidebar-collapsed .nav-icon {
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+}
+
+body.sidebar-collapsed .sidebar-toggle {
+  top: 58px;
+  right: 20px;
 }
 
 .brand small {
@@ -339,13 +408,14 @@ select:focus {
   justify-content: flex-start;
   gap: 6px;
   min-width: 28px;
-  border: 1px solid #30263d;
-  border-radius: var(--radius);
-  background: #14101b;
-  padding: 9px 10px;
+  border: 1px solid rgba(217, 184, 255, 0.13);
+  border-radius: 6px;
+  background: rgba(20, 16, 27, 0.34);
+  padding: 4px 7px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 850;
+  opacity: 0.34;
   white-space: nowrap;
 }
 
@@ -419,6 +489,11 @@ select:focus {
   padding: 0 24px 22px;
 }
 
+body.detail-collapsed:not([data-current-view="compare"]) .page-shell {
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+}
+
 body[data-current-view="compare"] .page-shell {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -445,9 +520,37 @@ body[data-current-view="compare"] .detail-panel {
 }
 
 .detail-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.detail-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
+}
+
+.detail-panel .panel-title-row {
+  padding-right: 50px;
+}
+
+body.detail-collapsed .detail-panel {
+  align-items: center;
+  min-width: 42px;
+}
+
+body.detail-collapsed .detail-panel .panel-title-row,
+body.detail-collapsed #selectedContent,
+body.detail-collapsed #compareTray {
+  display: none;
+}
+
+body.detail-collapsed .detail-toggle {
+  position: static;
+  margin-top: 10px;
 }
 
 .quick-stats {
@@ -483,10 +586,13 @@ body:not([data-current-view="search"]) .quick-stats {
 
 .stat-cell span {
   display: block;
+  overflow: hidden;
   color: var(--muted);
   font-size: 10px;
   font-weight: 800;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .stat-cell strong {
@@ -1358,6 +1464,14 @@ legend {
   background: #101827;
 }
 
+.insight-title h2 {
+  min-width: 0;
+  overflow: hidden;
+  flex: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .insight-title span {
   color: var(--muted);
   font-size: 10px;
@@ -1383,6 +1497,13 @@ legend {
 .insight-row span {
   overflow: hidden;
   color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insight-row .link-button {
+  overflow: hidden;
+  max-width: 100%;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2111,4 +2232,10 @@ a {
   .item-actions .secondary-action {
     white-space: normal;
   }
+}
+
+body.sidebar-collapsed .brand > span:not(.brand-mark),
+body.sidebar-collapsed .nav-section-label,
+body.sidebar-collapsed .sidebar-footer {
+  display: none;
 }

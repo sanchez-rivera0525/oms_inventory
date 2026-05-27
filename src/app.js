@@ -411,9 +411,13 @@ const REFERENCE_SHEETS = [
   { name: "legacy", label: "legacy", matchField: "legacy_match", onlyField: "legacy_reference_only" },
 ];
 
+const PANEL_PREFS_KEY = "oms_inventory_panel_state";
+const panelPrefs = readPanelPrefs();
+
 const els = {
   pageShell: document.querySelector("#pageShell"),
-  networkLinks: document.querySelector("#networkLinks"),
+  sidebarToggle: document.querySelector("[data-toggle-sidebar]"),
+  detailToggle: document.querySelector("[data-toggle-detail]"),
   searchInput: document.querySelector("#searchInput"),
   viewPanels: [...document.querySelectorAll("[data-view]")],
   viewLinks: [...document.querySelectorAll("[data-view-link]")],
@@ -447,6 +451,8 @@ const state = {
   editDraft: null,
   editDirty: false,
   importSummary: null,
+  sidebarCollapsed: panelPrefs.sidebarCollapsed,
+  detailCollapsed: panelPrefs.detailCollapsed,
 };
 
 init();
@@ -454,7 +460,7 @@ init();
 async function init() {
   bindEvents();
   state.view = viewFromPath(window.location.pathname);
-  fetchNetworkLinks();
+  applyPanelState();
   try {
     const dataset = await fetchInventory();
     loadDataset(dataset);
@@ -508,6 +514,24 @@ function bindEvents() {
     if (quickFilter) {
       event.preventDefault();
       setQuickFilter(quickFilter.dataset.quickFilter);
+      return;
+    }
+
+    const sidebarToggle = event.target.closest("[data-toggle-sidebar]");
+    if (sidebarToggle) {
+      event.preventDefault();
+      state.sidebarCollapsed = !state.sidebarCollapsed;
+      savePanelPrefs();
+      applyPanelState();
+      return;
+    }
+
+    const detailToggle = event.target.closest("[data-toggle-detail]");
+    if (detailToggle) {
+      event.preventDefault();
+      state.detailCollapsed = !state.detailCollapsed;
+      savePanelPrefs();
+      applyPanelState();
       return;
     }
 
@@ -612,24 +636,6 @@ async function fetchInventory() {
   }
 }
 
-async function fetchNetworkLinks() {
-  if (!els.networkLinks) return;
-  try {
-    const response = await fetch(API_NETWORK_URL, { cache: "no-store" });
-    if (!response.ok) throw new Error("Network links unavailable");
-    const payload = await response.json();
-    const links = payload.urls || [];
-    const phoneLink = links.find((item) => item.kind === "web") || links.find((item) => item.kind === "lan") || links[0];
-    if (!phoneLink) return;
-    els.networkLinks.innerHTML = `
-      <span>Phone</span>
-      <a href="${escapeAttr(phoneLink.url)}" target="_blank" rel="noreferrer">${escapeHtml(phoneLink.url)}</a>
-    `;
-  } catch (_error) {
-    els.networkLinks.innerHTML = `<span>Phone</span><span>same Wi-Fi</span>`;
-  }
-}
-
 function loadDataset(dataset) {
   state.dataset = normalizeDataset(dataset);
   state.selectedKey = state.dataset.rows[0]?.record_key || "";
@@ -642,6 +648,7 @@ function render() {
 
   document.body.dataset.currentView = state.view;
   document.body.dataset.editDirty = state.editDirty ? "true" : "false";
+  applyPanelState();
   els.viewPanels.forEach((panel) => panel.classList.toggle("active", panel.dataset.view === state.view));
   els.viewLinks.forEach((link) => link.classList.toggle("active", link.dataset.viewLink === state.view));
 
@@ -653,6 +660,43 @@ function render() {
   renderImportSummary();
   renderSelectedPanel();
   renderCompareTray();
+}
+
+function readPanelPrefs() {
+  try {
+    return { sidebarCollapsed: false, detailCollapsed: false, ...JSON.parse(window.localStorage?.getItem(PANEL_PREFS_KEY) || "{}") };
+  } catch (_error) {
+    return { sidebarCollapsed: false, detailCollapsed: false };
+  }
+}
+
+function savePanelPrefs() {
+  try {
+    window.localStorage?.setItem(
+      PANEL_PREFS_KEY,
+      JSON.stringify({
+        sidebarCollapsed: state.sidebarCollapsed,
+        detailCollapsed: state.detailCollapsed,
+      }),
+    );
+  } catch (_error) {
+    // Collapsing panels should still work when storage is unavailable.
+  }
+}
+
+function applyPanelState() {
+  document.body.classList.toggle("sidebar-collapsed", Boolean(state.sidebarCollapsed));
+  document.body.classList.toggle("detail-collapsed", Boolean(state.detailCollapsed));
+  if (els.sidebarToggle) {
+    els.sidebarToggle.setAttribute("aria-expanded", String(!state.sidebarCollapsed));
+    els.sidebarToggle.title = state.sidebarCollapsed ? "Expand main menu" : "Collapse main menu";
+    els.sidebarToggle.querySelector("span").textContent = state.sidebarCollapsed ? ">" : "<";
+  }
+  if (els.detailToggle) {
+    els.detailToggle.setAttribute("aria-expanded", String(!state.detailCollapsed));
+    els.detailToggle.title = state.detailCollapsed ? "Expand selected SKU panel" : "Collapse selected SKU panel";
+    els.detailToggle.querySelector("span").textContent = state.detailCollapsed ? "<" : ">";
+  }
 }
 
 function renderQuickStats() {
