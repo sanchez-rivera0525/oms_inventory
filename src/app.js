@@ -222,7 +222,38 @@ const COMPARE_SECTIONS = [
   },
 ];
 
-const COMPARE_FIELDS = COMPARE_SECTIONS.flatMap((section) => section.fields);
+const QUOTE_SUMMARY_SECTION = {
+  title: "Quote Summary",
+  fields: [
+    { id: "item_cost", label: "item_cost", type: "computedCurrency" },
+    { id: "stock_status", label: "stock_status" },
+    { id: "key_data_gaps", label: "quote_blockers", type: "keyGaps" },
+  ],
+};
+
+const SHIPPING_SUMMARY_SECTION = {
+  title: "Shipping Summary",
+  fields: [
+    { id: "normalized_load_weight", label: "ship_weight_used", type: "computedWeight" },
+    { id: "stock_status", label: "stock_status" },
+    { id: "key_data_gaps", label: "ship_blockers", type: "keyGaps" },
+  ],
+};
+
+const COMPARE_MODE_CONFIG = {
+  quotes: {
+    title: "Quote Compare",
+    empty: "Select rows from Search to compare quote details.",
+    sections: [COMPARE_SECTIONS[0], COMPARE_SECTIONS[2], QUOTE_SUMMARY_SECTION],
+  },
+  shipping: {
+    title: "Shipping Compare",
+    empty: "Select rows from Search to compare shipping only.",
+    sections: [COMPARE_SECTIONS[1], COMPARE_SECTIONS[3], SHIPPING_SUMMARY_SECTION],
+  },
+};
+
+const COMPARE_FIELDS = [...COMPARE_SECTIONS, QUOTE_SUMMARY_SECTION, SHIPPING_SUMMARY_SECTION].flatMap((section) => section.fields);
 
 const FIELD_LABELS = {
   model_number: "Model",
@@ -442,6 +473,7 @@ const els = {
   searchSubtitle: document.querySelector("#searchSubtitle"),
   searchPills: document.querySelector("#searchPills"),
   searchContent: document.querySelector("#searchContent"),
+  compareTitle: document.querySelector("#compareTitle"),
   compareSubtitle: document.querySelector("#compareSubtitle"),
   compareContent: document.querySelector("#compareContent"),
   editSubtitle: document.querySelector("#editSubtitle"),
@@ -465,6 +497,7 @@ const state = {
   quickFilter: "all",
   selectedKey: "",
   compareKeys: [],
+  compareMode: "quotes",
   editDraft: null,
   editDirty: false,
   importSummary: null,
@@ -477,6 +510,7 @@ init();
 async function init() {
   bindEvents();
   state.view = viewFromPath(window.location.pathname);
+  state.compareMode = compareModeFromPath(window.location.pathname);
   applyPanelState();
   try {
     const dataset = await fetchInventory();
@@ -490,18 +524,20 @@ function bindEvents() {
   els.searchInput.addEventListener("input", (event) => {
     state.query = event.target.value;
     if (searchNeedle(state.query).normalized) state.quickFilter = "all";
-    if (!["search", "compare", "reflect"].includes(state.view)) setView("search", true);
+    if (!["search", "compare"].includes(state.view)) setView("search", true);
     render();
   });
 
   els.viewLinks.forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
-      setView(link.dataset.viewLink, true);
+      setView(link.dataset.viewLink, true, { compareMode: link.dataset.compareMode });
     });
   });
 
-  window.addEventListener("popstate", () => setView(viewFromPath(window.location.pathname), false));
+  window.addEventListener("popstate", () =>
+    setView(viewFromPath(window.location.pathname), false, { compareMode: compareModeFromPath(window.location.pathname) }),
+  );
 
   document.addEventListener("click", async (event) => {
     const compareToggle = event.target.closest("[data-compare-key]");
@@ -590,7 +626,7 @@ function bindEvents() {
     const viewAction = event.target.closest("[data-view-action]");
     if (viewAction) {
       event.preventDefault();
-      setView(viewAction.dataset.viewAction, true);
+      setView(viewAction.dataset.viewAction, true, { compareMode: viewAction.dataset.compareMode });
       return;
     }
 
@@ -679,9 +715,13 @@ function render() {
 
   document.body.dataset.currentView = state.view;
   document.body.dataset.editDirty = state.editDirty ? "true" : "false";
+  document.body.dataset.compareMode = state.compareMode;
   applyPanelState();
   els.viewPanels.forEach((panel) => panel.classList.toggle("active", panel.dataset.view === state.view));
-  els.viewLinks.forEach((link) => link.classList.toggle("active", link.dataset.viewLink === state.view));
+  els.viewLinks.forEach((link) => {
+    const modeMatches = !link.dataset.compareMode || link.dataset.compareMode === state.compareMode;
+    link.classList.toggle("active", link.dataset.viewLink === state.view && modeMatches);
+  });
 
   renderQuickStats();
   renderSearch();
@@ -767,8 +807,6 @@ function renderSearch() {
       </div>
       <div class="toolbar-actions">
         ${state.quickFilter !== "all" ? `<button class="secondary-action" type="button" data-quick-filter="all">Clear Filter</button>` : ""}
-        <button class="secondary-action" type="button" data-view-action="compare">Load Compare ${state.compareKeys.length}/3</button>
-        <button class="secondary-action" type="button" data-view-action="reflect">Validation Queue</button>
       </div>
     </div>
     <div class="results-table-wrap">
@@ -874,8 +912,9 @@ function renderCompare() {
   const rows = compareRows();
   const mismatches = compareMismatchFields(rows);
   els.compareSubtitle.textContent = `${rows.length} of 3 selected${rows.length > 1 ? ` · ${mismatches.size} mismatched fields` : ""}.`;
+  els.compareSubtitle.textContent = `${rows.length} of 3 selected${rows.length > 1 ? ` - ${mismatches.size} mismatched fields` : ""}.`;
   if (!rows.length) {
-    els.compareContent.innerHTML = emptyState("No compare items", "Select rows from Search.");
+    els.compareContent.innerHTML = emptyState("No compare items", mode.empty);
     return;
   }
 
@@ -905,32 +944,68 @@ function renderCompareColumn(row, mismatches) {
 
 function renderCompareBoard() {
   const rows = compareRows();
-  const mismatches = compareMismatchFields(rows);
+  const mode = compareModeConfig();
+  const fields = compareFieldsForSections(mode.sections);
+  const mismatches = compareMismatchFields(rows, fields);
   const summary = compareSummary(rows);
-  els.compareSubtitle.textContent = `${rows.length} of 3 selected${rows.length > 1 ? ` Â· ${mismatches.size} mismatched fields` : ""}.`;
+  if (els.compareTitle) els.compareTitle.textContent = mode.title;
+  els.compareSubtitle.textContent = `${rows.length} of 3 selected${rows.length > 1 ? ` - ${mismatches.size} mismatched fields` : ""}.`;
   if (!rows.length) {
-    els.compareContent.innerHTML = emptyState("No compare items", "Select rows from Search.");
+    els.compareContent.innerHTML = emptyState("No compare items", mode.empty);
     return;
   }
 
   els.compareContent.innerHTML = `
     <div class="compare-board">
+      ${renderCompareSummaryMetrics(rows, summary, mismatches)}
+      <div class="compare-section-stack">
+        ${mode.sections.map((section) => renderCompareSection(section, rows, mismatches)).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function compareModeConfig() {
+  return COMPARE_MODE_CONFIG[state.compareMode] || COMPARE_MODE_CONFIG.quotes;
+}
+
+function compareFieldsForSections(sections) {
+  return sections.flatMap((section) => section.fields);
+}
+
+function renderCompareSummaryMetrics(rows, summary, mismatches) {
+  if (state.compareMode === "shipping") {
+    return `
       <div class="compare-summary-metrics">
-        <div>
-          <span>total_cost</span>
-          <strong>${formatCurrency(summary.totalCost)}</strong>
-        </div>
         <div>
           <span>aggregate_load_weight</span>
           <strong>${formatWeightNumber(summary.aggregateLoadWeight)}</strong>
+        </div>
+        <div>
+          <span>freight_review_items</span>
+          <strong>${rows.filter(isOversized).length}</strong>
         </div>
         <div>
           <span>selected_items</span>
           <strong>${rows.length}/3</strong>
         </div>
       </div>
-      <div class="compare-section-stack">
-        ${COMPARE_SECTIONS.map((section) => renderCompareSection(section, rows, mismatches)).join("")}
+    `;
+  }
+
+  return `
+    <div class="compare-summary-metrics">
+      <div>
+        <span>total_cost</span>
+        <strong>${formatCurrency(summary.totalCost)}</strong>
+      </div>
+      <div>
+        <span>quote_mismatches</span>
+        <strong>${mismatches.size}</strong>
+      </div>
+      <div>
+        <span>selected_items</span>
+        <strong>${rows.length}/3</strong>
       </div>
     </div>
   `;
@@ -1495,8 +1570,7 @@ function renderCompareTray() {
   const rows = compareRows();
   els.compareTray.innerHTML = `
     <div class="tray-head">
-      <strong>Load Compare ${rows.length}/3</strong>
-      <button class="link-button" type="button" data-view-action="compare">Board</button>
+      <strong>Staged Compare ${rows.length}/3</strong>
     </div>
     <div class="tray-items">
       ${
@@ -1575,9 +1649,10 @@ function defaultSort(a, b) {
   );
 }
 
-function setView(view, pushState) {
+function setView(view, pushState, options = {}) {
   state.view = viewFromName(view);
-  if (pushState) window.history.pushState({}, "", routeForView(state.view));
+  if (state.view === "compare") state.compareMode = compareModeFromName(options.compareMode || state.compareMode);
+  if (pushState) window.history.pushState({}, "", routeForView(state.view, state.compareMode));
   render();
 }
 
@@ -1591,10 +1666,12 @@ function setQuickFilter(filter) {
 
 function viewFromName(view) {
   if (view === "audit") return "reflect";
+  if (view === "quote-compare" || view === "shipping-compare") return "compare";
   return ["search", "compare", "edit", "reflect", "import"].includes(view) ? view : "search";
 }
 
 function viewFromPath(pathname) {
+  if (pathname.includes("quote-compare") || pathname.includes("shipping-compare")) return "compare";
   if (pathname.includes("compare")) return "compare";
   if (pathname.includes("edit")) return "edit";
   if (pathname.includes("audit")) return "reflect";
@@ -1603,8 +1680,26 @@ function viewFromPath(pathname) {
   return "search";
 }
 
-function routeForView(view) {
-  const path = view === "reflect" ? "/audit" : view === "search" ? "/search" : `/${view}`;
+function compareModeFromName(mode) {
+  return mode === "shipping" ? "shipping" : "quotes";
+}
+
+function compareModeFromPath(pathname) {
+  if (pathname.includes("shipping-compare")) return "shipping";
+  return "quotes";
+}
+
+function routeForView(view, compareMode = state.compareMode) {
+  const path =
+    view === "reflect"
+      ? "/audit"
+      : view === "search"
+        ? "/search"
+        : view === "compare"
+          ? compareModeFromName(compareMode) === "shipping"
+            ? "/shipping-compare"
+            : "/quote-compare"
+          : `/${view}`;
   return withBasePath(path);
 }
 
@@ -1620,10 +1715,10 @@ function compareRows() {
   return state.compareKeys.map(rowByKey).filter(Boolean);
 }
 
-function compareMismatchFields(rows) {
+function compareMismatchFields(rows, fields = COMPARE_FIELDS) {
   if (rows.length < 2) return new Set();
   return new Set(
-    COMPARE_FIELDS.filter((field) => {
+    fields.filter((field) => {
       const values = rows.map((row) => cleanComparable(compareComparableValue(row, field)));
       return values.some(Boolean) && new Set(values).size > 1;
     }).map((field) => field.id),

@@ -26,19 +26,23 @@
             <span class="nav-icon">F</span>
             SKU Lookup
           </a>
-          <a href="./compare" data-view-link="compare">
-            <span class="nav-icon">C</span>
-            Load Compare
+          <a href="./quote-compare" data-view-link="compare" data-compare-mode="quotes">
+            <span class="nav-icon">Q</span>
+            Quote Compare
           </a>
-          <a href="./edit" data-view-link="edit">
+          <a href="./shipping-compare" data-view-link="compare" data-compare-mode="shipping">
+            <span class="nav-icon">S</span>
+            Shipping Compare
+          </a>
+          <span class="nav-section-label">Admin</span>
+          <a class="utility-link" href="./edit" data-view-link="edit">
             <span class="nav-icon">E</span>
             SKU Edit
           </a>
-          <a href="./audit" data-view-link="reflect">
+          <a class="utility-link" href="./audit" data-view-link="reflect">
             <span class="nav-icon">!</span>
             Validation Queue
           </a>
-          <span class="nav-section-label">Resources</span>
           <a class="utility-link" href="./import" data-view-link="import">
             <span class="nav-icon">U</span>
             Load Sheet
@@ -97,7 +101,7 @@
             <section id="compareView" class="view-panel" data-view="compare">
               <div class="panel-heading">
                 <div>
-                  <h1>Load Compare</h1>
+                  <h1 id="compareTitle">Quote Compare</h1>
                   <p id="compareSubtitle">Side-by-side shipping checks</p>
                 </div>
                 <button id="clearCompare" class="secondary-action" type="button" data-clear-compare>

@@ -25,24 +25,28 @@ export default async function InventoryPage() {
           <nav className="tabs" aria-label="Inventory workflows">
             <span className="nav-section-label">Main Menu</span>
             <a href="/search" data-view-link="search">
-              <span className="nav-icon">⌕</span>
+              <span className="nav-icon">F</span>
               SKU Lookup
             </a>
-            <a href="/compare" data-view-link="compare">
-              <span className="nav-icon">⇄</span>
-              Load Compare
+            <a href="/quote-compare" data-view-link="compare" data-compare-mode="quotes">
+              <span className="nav-icon">Q</span>
+              Quote Compare
             </a>
-            <a href="/edit" data-view-link="edit">
-              <span className="nav-icon">✎</span>
+            <a href="/shipping-compare" data-view-link="compare" data-compare-mode="shipping">
+              <span className="nav-icon">S</span>
+              Shipping Compare
+            </a>
+            <span className="nav-section-label">Admin</span>
+            <a className="utility-link" href="/edit" data-view-link="edit">
+              <span className="nav-icon">E</span>
               SKU Edit
             </a>
-            <a href="/audit" data-view-link="reflect">
-              <span className="nav-icon">⚠</span>
+            <a className="utility-link" href="/audit" data-view-link="reflect">
+              <span className="nav-icon">!</span>
               Validation Queue
             </a>
-            <span className="nav-section-label">Resources</span>
             <a className="utility-link" href="/import" data-view-link="import">
-              <span className="nav-icon">⇧</span>
+              <span className="nav-icon">U</span>
               Load Sheet
             </a>
           </nav>
@@ -93,7 +97,7 @@ export default async function InventoryPage() {
               <section id="compareView" className="view-panel" data-view="compare">
                 <div className="panel-heading">
                   <div>
-                    <h1>Load Compare</h1>
+                    <h1 id="compareTitle">Quote Compare</h1>
                     <p id="compareSubtitle">Side-by-side shipping checks</p>
                   </div>
                   <button id="clearCompare" className="secondary-action" type="button" data-clear-compare>
