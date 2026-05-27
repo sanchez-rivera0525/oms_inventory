@@ -10,7 +10,7 @@
     "start": "next start -H 0.0.0.0 -p 4176",
     "import": "node scripts/import-oms-inventory.cjs",
     "serve:legacy": "node scripts/serve.cjs 4176",
-    "test": "node scripts/check-data.cjs && node --check src/app.js"
+    "test": "node scripts/check-data.cjs && node scripts/check-xlsx-export.mjs && node --check src/app.js && node --check src/xlsx-export.js"
   },
   "dependencies": {
     "@clerk/nextjs": "7.4.1",

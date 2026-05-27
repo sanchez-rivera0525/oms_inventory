@@ -132,6 +132,17 @@ export default async function InventoryPage() {
                     <h1>Load Sheet</h1>
                     <p id="importSubtitle">Replace working SKU file</p>
                   </div>
+                  <div className="toolbar-actions">
+                    <button className="secondary-action" type="button" data-export-format="xlsx">
+                      Export XLSX
+                    </button>
+                    <button className="secondary-action" type="button" data-export-format="csv">
+                      Export CSV
+                    </button>
+                    <button className="secondary-action" type="button" data-export-format="json">
+                      Export JSON
+                    </button>
+                  </div>
                 </div>
                 <label id="dropZone" className="upload-zone">
                   <input id="fileInput" type="file" accept=".xlsx,.xls,.csv,.json" />

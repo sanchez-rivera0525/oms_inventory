@@ -1,3 +1,5 @@
+import { buildInventoryXlsxBlob, inventoryXlsxFileName } from "./xlsx-export.js";
+
 const API_DATA_URL = "/api/inventory";
 const API_IMPORT_URL = "/api/import";
 const API_CONFIG_URL = "/api/config";
@@ -765,6 +767,7 @@ function renderSearch() {
       </div>
       <div class="toolbar-actions">
         ${state.quickFilter !== "all" ? `<button class="secondary-action" type="button" data-quick-filter="all">Clear Filter</button>` : ""}
+        <button class="secondary-action" type="button" data-export-format="xlsx">Export XLSX</button>
         <button class="secondary-action" type="button" data-export-format="csv">Export CSV</button>
         <button class="secondary-action" type="button" data-export-format="json">Export JSON</button>
         <button class="secondary-action" type="button" data-view-action="compare">Load Compare ${state.compareKeys.length}/3</button>
@@ -1806,14 +1809,21 @@ function exportInventoryData(format = "csv") {
     setSaveStatus("No data to export.");
     return;
   }
-  const snapshot = exportDatasetSnapshot();
-  const timestamp = fileTimestamp(new Date());
-  if (format === "json") {
-    downloadText(`oms_inventory_export_${timestamp}.json`, `${JSON.stringify(snapshot, null, 2)}\n`, "application/json");
-  } else {
-    downloadText(`oms_inventory_export_${timestamp}.csv`, toCsv(snapshot.fields, snapshot.rows), "text/csv");
+  try {
+    const snapshot = exportDatasetSnapshot();
+    const exportDate = new Date();
+    const timestamp = fileTimestamp(exportDate);
+    if (format === "json") {
+      downloadText(`oms_inventory_export_${timestamp}.json`, `${JSON.stringify(snapshot, null, 2)}\n`, "application/json");
+    } else if (format === "xlsx") {
+      downloadBlob(inventoryXlsxFileName(exportDate), buildInventoryXlsxBlob(window.XLSX, snapshot));
+    } else {
+      downloadText(`oms_inventory_export_${timestamp}.csv`, toCsv(snapshot.fields, snapshot.rows), "text/csv");
+    }
+    setSaveStatus(state.editDirty ? "Exported with unsaved draft." : "Export ready.");
+  } catch (error) {
+    setSaveStatus(`Export failed: ${error.message}`);
   }
-  setSaveStatus(state.editDirty ? "Exported with unsaved draft." : "Export ready.");
 }
 
 function exportDatasetSnapshot() {
@@ -1861,6 +1871,10 @@ function currentOperator(promptLabel = "Operator") {
 
 function downloadText(fileName, text, mimeType) {
   const blob = new Blob([text], { type: `${mimeType};charset=utf-8` });
+  downloadBlob(fileName, blob);
+}
+
+function downloadBlob(fileName, blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
