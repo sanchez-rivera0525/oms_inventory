@@ -47,7 +47,10 @@ const EXTRA_FIELDS = [
   "unit",
   "oem",
   "brand",
+  "upc",
+  "color_code",
   "cost",
+  "store_price",
   "gross_weight_lb",
   "cubic_feet",
   "pallet_size",
@@ -57,6 +60,16 @@ const EXTRA_FIELDS = [
   "pictures",
   "notes",
   "notes2",
+  "shop_status",
+  "reference_sources",
+  "database_match",
+  "frontend_match",
+  "legacy_match",
+  "database_only",
+  "frontend_only",
+  "legacy_reference_only",
+  "missing_from_master_lookup",
+  "discontinued_reference",
 ];
 
 const OUTPUT_FIELDS = [...REQUIRED_FIELDS, ...EXTRA_FIELDS];
@@ -69,7 +82,10 @@ const SEARCH_FIELDS = [
   "frame_color",
   "series",
   "carrier_type",
+  "upc",
+  "color_code",
   "notes",
+  "notes2",
 ];
 
 const SKU_SEARCH_FIELDS = ["model_number", "part_number"];
@@ -82,8 +98,11 @@ const OPS_SEARCH_FIELDS = [
   "series",
   "series_code",
   "carrier_type",
+  "upc",
+  "color_code",
   "notes",
   "notes2",
+  "reference_sources",
   "warehouse_category",
 ];
 
@@ -224,16 +243,24 @@ const FIELD_LABELS = {
   source_status: "Source status",
   department: "Dept",
   unit: "Unit",
+  upc: "UPC",
+  color_code: "Color code",
   cost: "Cost",
+  store_price: "Store price",
   pictures: "Image link",
   notes: "Notes",
   notes2: "Notes 2",
+  shop_status: "Shop status",
+  reference_sources: "Sources",
+  missing_from_master_lookup: "Missing from master",
+  discontinued_reference: "Discontinued ref",
 };
 
 const HEADER_ALIASES = new Map(
   Object.entries({
     classification: "classification",
     type: "item_type",
+    type2: "classification",
     item_type: "item_type",
     class: "series_code",
     series_code: "series_code",
@@ -246,7 +273,9 @@ const HEADER_ALIASES = new Map(
     brand: "brand",
     model_number: "model_number",
     modelnumber: "model_number",
+    model_part_number: "model_number",
     model: "model_number",
+    reconciled_list: "model_number",
     item_no: "part_number",
     item_number: "part_number",
     itemno: "part_number",
@@ -256,23 +285,34 @@ const HEADER_ALIASES = new Map(
     part_number_alt: "part_number",
     description: "description",
     normalized_description: "description",
+    description_normalized: "description",
     oms_description1: "specs",
     oms_description2: "notes",
+    color_code: "color_code",
     canopy_color_color: "canopy_color",
     canopy_color: "canopy_color",
+    color_description: "canopy_color",
     color: "canopy_color",
     frame_color: "frame_color",
     cost: "cost",
     advaning_price: "cost",
+    store_price: "store_price",
+    price: "cost",
     oms_price: "retail",
     qty_price1: "retail",
+    upc: "upc",
     carrier_type: "carrier_type",
     carrier: "carrier_type",
+    shipping_weight: "gross_weight_lb",
     product_weight_lb: "product_weight_lb",
     product_weight_lbs: "product_weight_lb",
+    product_weight: "product_weight_lb",
     qty_wt: "product_weight_lb",
     qty_weight: "product_weight_lb",
     gross_weight_lb: "gross_weight_lb",
+    gross_weight_lbs: "gross_weight_lb",
+    gross_weight: "gross_weight_lb",
+    length_in: "carton_1_width",
     width_in: "carton_1_width",
     depth_in: "carton_1_depth",
     height_in: "carton_1_height",
@@ -294,8 +334,11 @@ const HEADER_ALIASES = new Map(
     total_product_pallet_weight_lb: "total_product_pallet_weight_lb",
     total_product_pallet_weight: "total_product_pallet_weight_lb",
     total_product_plus_pallet_weight: "total_product_pallet_weight_lb",
+    total_product_pallet_weight_lbs: "total_product_pallet_weight_lb",
+    roduct_pallet_weight_lbs: "total_product_pallet_weight_lb",
     shipping_dims: "shipping_dims",
     shipping_dimensions: "shipping_dims",
+    shipping_dimensions_in: "shipping_dims",
     ships_via: "ships_via",
     retail: "retail",
     q3_2025_retail: "q3_2025_retail",
@@ -306,7 +349,7 @@ const HEADER_ALIASES = new Map(
     notes2: "notes2",
     location: "location",
     inventory: "inventory",
-    in_shop: "inventory",
+    in_shop: "shop_status",
     qty: "inventory",
     quantity: "inventory",
   }),
@@ -360,6 +403,12 @@ const WAREHOUSE_CATEGORIES = [
   "Replacement Components",
   "Shipping/Packaging Items",
   "Unknown / Review Needed",
+];
+
+const REFERENCE_SHEETS = [
+  { name: "oms_inventory_master", label: "database", matchField: "database_match", onlyField: "database_only" },
+  { name: "Sheet10", label: "frontend", matchField: "frontend_match", onlyField: "frontend_only" },
+  { name: "legacy", label: "legacy", matchField: "legacy_match", onlyField: "legacy_reference_only" },
 ];
 
 const els = {
@@ -1606,7 +1655,8 @@ async function saveSelectedEdit() {
   EDITABLE_FIELDS.forEach(({ field }) => {
     row[field] = cleanCell(state.editDraft.values[field]);
   });
-  row.shipping_dims = cleanCell(row.shipping_dims || makeShippingDims(row));
+  row.shipping_dims = cleanCell(row.shipping_dims);
+  if (!hasDimensionNumbers(row.shipping_dims)) row.shipping_dims = makeShippingDims(row);
   row.last_updated = new Date().toISOString();
   refreshRowDerived(row, state.dataset.app_config);
   state.dataset.summary = summarizeRows(state.dataset.rows);
@@ -1684,14 +1734,12 @@ async function datasetFromFile(file) {
   if (!window.XLSX) throw new Error("Spreadsheet parser did not load.");
 
   const workbook = window.XLSX.read(await file.arrayBuffer(), { type: "array" });
-  const sheetName = inventorySheetName(workbook.SheetNames);
-  if (!sheetName) throw new Error("Workbook must include an OMS_inventory/masterlist sheet or a single uploadable sheet.");
-  const aoa = window.XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "", blankrows: false });
-  return makeDatasetFromAoa(aoa, file.name, sheetName);
+  return makeDatasetFromWorkbook(workbook, file.name);
 }
 
 function inventorySheetName(sheetNames) {
   return (
+    sheetNames.find((name) => name.toLowerCase() === "master_lookup") ||
     sheetNames.find((name) => name === "OMS_inventory") ||
     sheetNames.find((name) => name.toLowerCase() === "oms_inventory") ||
     sheetNames.find((name) => name.toLowerCase() === "masterlist") ||
@@ -1739,7 +1787,8 @@ function makeDataset(rows, meta, sourceHeaderMap = {}, missingSourceHeaders = []
       source_sheet_name: meta.source_sheet_name || "OMS_inventory",
       source_file_name: meta.source_file_name || "Uploaded file",
       generated_at: meta.generated_at || new Date().toISOString(),
-      source_rule: "One normalized oms_inventory table; upload may come from OMS_inventory or masterlist. Reference-only columns are retained only when operationally useful.",
+      source_rule:
+        "master_lookup is the frontend canonical sheet. Product_Lookup is ignored. oms_inventory_master, Sheet10, and legacy are used as database/reference sources for enrichment and missing-SKU recovery.",
       classification_rule: "Awnings are controlled by app_config.awning_classifications. All other sections filter the same rows.",
       relationship_rule: "Series/class codes from masterlist create parent-child reference links from series groups to awnings, parts, fabrics, and accessories.",
     },
@@ -1755,18 +1804,27 @@ function makeDataset(rows, meta, sourceHeaderMap = {}, missingSourceHeaders = []
   return dataset;
 }
 
+function makeDatasetFromWorkbook(workbook, sourceFileName) {
+  const sheetName = inventorySheetName(workbook.SheetNames);
+  if (!sheetName) throw new Error("Workbook must include master_lookup, OMS_inventory, masterlist, or a single uploadable sheet.");
+  const aoa = window.XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "", blankrows: false });
+  const dataset = makeDatasetFromAoa(aoa, sourceFileName, sheetName);
+  upgradeDatasetFromWorkbook(dataset, workbook);
+  return dataset;
+}
+
 function makeDatasetFromAoa(aoa, sourceFileName, sourceSheetName) {
   if (!aoa.length) throw new Error("Uploaded OMS inventory file is empty.");
-  const headers = normalizeHeaders(aoa[0]);
-  const missingCore = ["description", "classification"].filter((field) => !headers.canonicalHeaders.includes(field));
-  if (!headers.canonicalHeaders.includes("model_number") && !headers.canonicalHeaders.includes("part_number")) missingCore.unshift("model_number/part_number");
-  if (missingCore.length) throw new Error(`Missing required source headers: ${missingCore.join(", ")}`);
-
   const meta = {
     source_file_name: sourceFileName,
     source_sheet_name: sourceSheetName,
     generated_at: new Date().toISOString(),
   };
+  const headers = normalizeHeaders(aoa[0], meta);
+  const missingCore = ["description", "classification"].filter((field) => !headers.canonicalHeaders.includes(field));
+  if (!headers.canonicalHeaders.includes("model_number") && !headers.canonicalHeaders.includes("part_number")) missingCore.unshift("model_number/part_number");
+  if (missingCore.length) throw new Error(`Missing required source headers: ${missingCore.join(", ")}`);
+
   const context = {};
   const rows = aoa
     .slice(1)
@@ -1783,6 +1841,165 @@ function makeDatasetFromAoa(aoa, sourceFileName, sourceSheetName) {
   return makeDataset(rows, meta, headers.sourceHeaderMap, headers.missingSourceHeaders);
 }
 
+function upgradeDatasetFromWorkbook(dataset, workbook) {
+  if (cleanCell(dataset.metadata.source_sheet_name).toLowerCase() !== "master_lookup") return;
+
+  const references = REFERENCE_SHEETS.map((definition) => ({
+    ...definition,
+    rows: referenceRowsFromSheet(workbook, definition.name, dataset.metadata),
+  }));
+  dataset.metadata.reference_sheet_names = references.filter((reference) => reference.rows.length).map((reference) => reference.name);
+  dataset.metadata.reference_counts = Object.fromEntries(references.map((reference) => [reference.label, reference.rows.length]));
+
+  enrichRowsFromReferences(dataset.rows, references);
+
+  const presentKeys = new Set(dataset.rows.map(referenceKey).filter(Boolean));
+  references.forEach((reference) => {
+    reference.rows.forEach((row) => {
+      const key = referenceKey(row);
+      if (!key || presentKeys.has(key) || !isUsefulReferenceRow(row)) return;
+      const missingRow = { ...row };
+      missingRow.missing_from_master_lookup = "yes";
+      missingRow[reference.onlyField] = "yes";
+      missingRow[reference.matchField] = "yes";
+      missingRow.reference_sources = reference.label;
+      missingRow.last_updated = dataset.metadata.generated_at;
+      if (isDiscontinuedReference(missingRow)) missingRow.discontinued_reference = "yes";
+      dataset.rows.push(missingRow);
+      presentKeys.add(key);
+    });
+  });
+
+  enrichRowsFromReferences(dataset.rows, references);
+  dataset.rows = assignRecordKeys(dataset.rows);
+  applyConfigToRows(dataset);
+}
+
+function referenceRowsFromSheet(workbook, sheetName, baseMeta) {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+  const aoa = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: false });
+  if (!aoa.length) return [];
+  const meta = {
+    source_file_name: baseMeta.source_file_name,
+    source_sheet_name: sheetName,
+    generated_at: baseMeta.generated_at,
+  };
+  const headers = normalizeHeaders(aoa[0], meta);
+  const context = {};
+  return aoa
+    .slice(1)
+    .map((row, index) => {
+      const record = {};
+      headers.canonicalHeaders.forEach((field, column) => {
+        record[field] = cleanCell(row[column]);
+      });
+      applyGroupedContext(record, context);
+      return normalizeRecordObject(record, index + 2, meta);
+    })
+    .filter((row) => referenceKey(row) && isUsefulReferenceRow(row));
+}
+
+function enrichRowsFromReferences(rows, references) {
+  const indexes = references.map((reference) => ({ ...reference, index: indexRowsByKey(reference.rows) }));
+  rows.forEach((row) => {
+    indexes.forEach((reference) => {
+      const key = referenceKey(row);
+      const referenceRow = key ? reference.index.get(key)?.[0] : null;
+      if (!referenceRow) return;
+      row[reference.matchField] = "yes";
+      row.reference_sources = appendToken(row.reference_sources, reference.label);
+      if (isDiscontinuedReference(referenceRow) || isDiscontinuedReference(row)) row.discontinued_reference = "yes";
+      mergeReferenceFields(row, referenceRow, reference.label);
+    });
+  });
+}
+
+function indexRowsByKey(rows) {
+  return rows.reduce((index, row) => {
+    const key = referenceKey(row);
+    if (!key) return index;
+    if (!index.has(key)) index.set(key, []);
+    index.get(key).push(row);
+    return index;
+  }, new Map());
+}
+
+function referenceKey(row) {
+  return normalizeKey(row.model_number || row.part_number);
+}
+
+function isUsefulReferenceRow(row) {
+  const key = referenceKey(row);
+  if (!key) return false;
+  if (["model number", "part number", "part #", "reconciled list"].includes(key)) return false;
+  if (key.startsWith("column ")) return false;
+  return Boolean(cleanCell(row.description || row.classification || row.shipping_dims || row.notes || row.pictures));
+}
+
+function mergeReferenceFields(row, referenceRow, label) {
+  if (label === "legacy" && isMisalignedLegacyRow(referenceRow)) return;
+  const fillFields = [
+    "description",
+    "classification",
+    "series",
+    "series_code",
+    "item_type",
+    "canopy_color",
+    "frame_color",
+    "color_code",
+    "upc",
+    "carrier_type",
+    "ships_via",
+    "shipping_dims",
+    "carton_1_width",
+    "carton_1_depth",
+    "carton_1_height",
+    "product_weight_lb",
+    "gross_weight_lb",
+    "pallet_weight_lb",
+    "total_product_pallet_weight_lb",
+    "pallet_size",
+    "cubic_feet",
+    "inventory",
+    "cost",
+    "store_price",
+    "retail",
+    "q3_2025_retail",
+    "specs",
+    "pictures",
+    "location",
+    "shop_status",
+    "oem",
+    "brand",
+  ];
+  fillFields.forEach((field) => {
+    if (!hasUsableValue(row[field]) && hasUsableValue(referenceRow[field])) row[field] = referenceRow[field];
+  });
+  if (!hasUsableValue(row.notes) && hasUsableValue(referenceRow.notes)) {
+    row.notes = referenceRow.notes;
+  } else if (hasUsableValue(referenceRow.notes) && cleanCell(referenceRow.notes) !== cleanCell(row.notes)) {
+    row.notes2 = appendToken(row.notes2, `${label}: ${referenceRow.notes}`, " | ");
+  }
+}
+
+function isMisalignedLegacyRow(row) {
+  if (cleanCell(row.source_sheet_name).toLowerCase() !== "legacy") return false;
+  const description = cleanCell(row.description);
+  const picture = cleanCell(row.pictures);
+  const looksLikeUpc = description.toLowerCase() === "upc" || /^\d{10,14}$/.test(description) || /^\d+(?:\.\d+)?e\+\d+$/i.test(description);
+  return looksLikeUpc && !hasDimensionNumbers(row.shipping_dims) && /^\d+(?:\.\d+)?$/.test(picture);
+}
+
+function appendToken(value, token, separator = ", ") {
+  const existing = cleanCell(value);
+  const next = cleanCell(token);
+  if (!next) return existing;
+  const parts = existing ? existing.split(separator).map(cleanCell).filter(Boolean) : [];
+  if (!parts.some((part) => part.toLowerCase() === next.toLowerCase())) parts.push(next);
+  return parts.join(separator);
+}
+
 function applyGroupedContext(record, context) {
   const shouldFillFromGroup = !cleanCell(record.model_number) && cleanCell(record.part_number);
   GROUPED_CONTEXT_FIELDS.forEach((field) => {
@@ -1794,13 +2011,13 @@ function applyGroupedContext(record, context) {
   });
 }
 
-function normalizeHeaders(headerRow) {
+function normalizeHeaders(headerRow, meta = {}) {
   const canonicalHeaders = [];
   const sourceHeaderMap = {};
   const seen = new Map();
   headerRow.forEach((rawHeader, index) => {
     const raw = cleanCell(rawHeader) || `Column ${index + 1}`;
-    const base = canonicalFieldName(raw);
+    const base = canonicalFieldName(raw, meta);
     const count = seen.get(base) || 0;
     seen.set(base, count + 1);
     const canonical = count ? `${base}_${count + 1}` : base;
@@ -1821,11 +2038,14 @@ function normalizeRecordObject(input, sourceRowNumber, meta = {}) {
   record.source_classification = cleanCell(record.source_classification || record.classification);
   record.classification = cleanCell(record.classification || record.source_classification);
   record.item_type = cleanCell(record.item_type);
-  record.series_code = cleanCell(record.series_code || inferSeriesCode(record.model_number || record.part_number));
-  record.series = cleanCell(record.series || seriesFromCode(record.series_code));
+  const sourceSeries = cleanCell(record.series);
+  record.series_code = cleanCell(record.series_code || (seriesFromCode(sourceSeries) ? sourceSeries : "") || inferSeriesCode(record.model_number || record.part_number));
+  record.series = cleanCell(seriesFromCode(record.series_code) || sourceSeries);
   record.description = cleanCell(record.description || record.specs || record.notes || record.canopy_color);
+  if (cleanCell(record.pictures) === "0") record.pictures = "";
   record.part_number = cleanCell(record.part_number || (record.classification.toLowerCase() === "awning" ? "" : record.model_number));
-  record.shipping_dims = cleanCell(record.shipping_dims || makeShippingDims(record));
+  record.shipping_dims = cleanCell(record.shipping_dims);
+  if (!hasDimensionNumbers(record.shipping_dims)) record.shipping_dims = makeShippingDims(record);
   fillCartonDimsFromShippingDims(record);
   record.last_updated = cleanCell(record.last_updated || meta.generated_at || new Date().toISOString());
   record.source_file_name = cleanCell(record.source_file_name || meta.source_file_name || "Unknown source");
@@ -2094,6 +2314,8 @@ function cannotShip(row) {
 
 function shippingFlags(row) {
   const flags = [];
+  if (displayText(row.discontinued_reference)) flags.push({ label: "Discontinued Ref", level: "warn" });
+  if (displayText(row.missing_from_master_lookup)) flags.push({ label: "Missing Master", level: "warn" });
   if (isMissingShippingDims(row)) flags.push({ label: "Missing Dims", level: "danger" });
   if (isMissingShipWeight(row)) flags.push({ label: "Missing Weight", level: "danger" });
   if (isPendingCarrier(row)) flags.push({ label: "Pending Carrier", level: "danger" });
@@ -2243,7 +2465,7 @@ function reviewNotes(record) {
   return notes.join(" ");
 }
 
-function canonicalFieldName(rawHeader) {
+function canonicalFieldName(rawHeader, meta = {}) {
   const normalized = cleanCell(rawHeader)
     .toLowerCase()
     .replace(/#/g, "number")
@@ -2251,6 +2473,7 @@ function canonicalFieldName(rawHeader) {
     .replace(/&/g, " and ")
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+  if (cleanCell(meta.source_sheet_name).toLowerCase() === "master_lookup" && normalized === "width_in") return "carton_1_depth";
   return HEADER_ALIASES.get(normalized) || normalized || "unknown";
 }
 
@@ -2363,7 +2586,8 @@ function formatDimensionValue(row, field = {}) {
 }
 
 function dimensionValue(row) {
-  return displayText(row.shipping_dims) || makeShippingDims(row);
+  const shippingDims = displayText(row.shipping_dims);
+  return hasDimensionNumbers(shippingDims) ? shippingDims : makeShippingDims(row);
 }
 
 function formatFieldValue(value) {
@@ -2618,8 +2842,27 @@ function isPendingVerificationValue(value) {
   return Boolean(text && (text.includes("data pending") || text.includes("pending verification") || text === "needs verification"));
 }
 
+function isDiscontinuedReference(row) {
+  const status = cleanCell(`${row.source_status} ${row.shop_status} ${row.notes} ${row.notes2}`).toLowerCase();
+  if (!status) return false;
+  return (
+    status.includes("discontinued") ||
+    status.includes("obsolete") ||
+    status.includes("do not use") ||
+    status.includes("do not sell") ||
+    status.includes("ⓧ") ||
+    status.includes("✗") ||
+    status.includes("×") ||
+    status === "x"
+  );
+}
+
 function hasUsableValue(value) {
   return Boolean(displayText(value));
+}
+
+function hasDimensionNumbers(value) {
+  return (cleanCell(value).match(/\d+(?:\.\d+)?/g) || []).length >= 3;
 }
 
 function cleanComparable(value) {

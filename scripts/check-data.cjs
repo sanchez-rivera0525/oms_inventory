@@ -30,11 +30,12 @@ const required = [
 
 assert(data.table_name === "oms_inventory", "table must be named oms_inventory");
 const sourceSheetName = String(data.metadata.source_sheet_name || "").toLowerCase();
-assert(["oms_inventory", "masterlist"].includes(sourceSheetName), "source sheet must be OMS_inventory or masterlist");
+assert(["master_lookup", "oms_inventory", "masterlist"].includes(sourceSheetName), "source sheet must be master_lookup, OMS_inventory, or masterlist");
 assert(Array.isArray(data.rows), "rows must be an array");
-assert(data.rows.length >= 600, "expected the single OMS_inventory sheet, not a tiny sample");
+assert(data.rows.length >= 800, "expected the canonical master lookup plus recovered reference rows, not a tiny sample");
 assert(!JSON.stringify(data).includes("Copy of PARTS"), "must not include Copy of PARTS data");
 assert(!JSON.stringify(data).includes("Cash Flow"), "must not include finance data");
+assert(!JSON.stringify(data).includes("Product Lookup Table:"), "must ignore the Product_Lookup comparison sheet");
 assert(data.app_config, "app_config must be stored with the inventory data");
 assert(Array.isArray(data.app_config.awning_classifications), "awning class configuration must be persisted");
 
@@ -63,6 +64,16 @@ assert(
   /Ocean Blue/i.test(`${awning.description} ${awning.canopy_color}`),
   "EAF1310 should reflect the updated Ocean Blue source value",
 );
+assert(awning.series === "Prestige Series", "short P series code should normalize to Prestige Series");
+assert(awning.reference_sources.includes("database"), "master lookup rows should retain database reference matches");
+assert(data.metadata.reference_counts?.database >= 700, "database reference sheet should be indexed");
+assert(data.metadata.reference_counts?.frontend >= 600, "frontend canonical reference sheet should be indexed");
+assert(data.rows.filter((row) => row.missing_from_master_lookup).length >= 150, "missing master_lookup SKUs should be recovered");
+
+const recovered = data.rows.find((row) => row.model_number === "EA1008-A222H");
+assert(recovered, "expected database-only EA1008-A222H recovery row");
+assert(recovered.missing_from_master_lookup === "yes", "database-only recovery rows should be marked missing from master_lookup");
+assert(recovered.database_only === "yes", "database-only recovery rows should be marked database_only");
 
 const part = data.rows.find((row) => row.model_number === "ZLA-WMB-B1");
 assert(part, "expected ZLA-WMB-B1");
